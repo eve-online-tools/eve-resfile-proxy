@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: "CI: ${{ matrix.task }}"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        task: [format, test, lint]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check formatting
+        if: matrix.task == 'format'
+        run: test -z "$(gofmt -l .)"
+
+      - name: Run tests
+        if: matrix.task == 'test'
+        run: go test -race -count=1 ./...
+
+      - name: golangci-lint
+        if: matrix.task == 'lint'
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2

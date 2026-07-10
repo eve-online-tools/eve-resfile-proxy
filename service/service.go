@@ -10,6 +10,7 @@ import (
 
 	"github.com/eve-online-tools/eve-resfile-proxy/internal/fetch"
 	"github.com/eve-online-tools/eve-resfile-proxy/internal/index"
+	"github.com/eve-online-tools/eve-resfile-proxy/internal/transform"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/handler"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/conditional"
@@ -18,6 +19,7 @@ import (
 	indexmw "github.com/eve-online-tools/eve-resfile-proxy/service/middleware/index"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/load"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/resolve"
+	transformmw "github.com/eve-online-tools/eve-resfile-proxy/service/middleware/transform"
 )
 
 type Service struct {
@@ -37,6 +39,15 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Service, error) {
 	}
 
 	cfg = cfg.withDefaults()
+
+	transformEngine := o.transformEngine
+	if transformEngine == nil && cfg.TransformConfig != "" {
+		var loadErr error
+		transformEngine, loadErr = transform.LoadEngine(cfg.TransformConfig)
+		if loadErr != nil {
+			return nil, fmt.Errorf("load transform config: %w", loadErr)
+		}
+	}
 
 	indexSet, err := index.Load(ctx, index.LoaderOptions{
 		BuildNumber:  cfg.BuildNumber,
@@ -61,6 +72,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Service, error) {
 		indexmw.Middleware(cfg.IndexListing, indexSet),
 		resolve.Middleware(indexSet),
 		load.Middleware(o.cache, fetchClient, cfg.AssetOrigin),
+		transformmw.Middleware(transformEngine),
 		conditional.Middleware,
 	}
 	middlewares = append(middlewares, o.middlewares...)

@@ -33,6 +33,64 @@ curl -o icon.png 'http://localhost:8080/icons/64/icon64.png'
 | `--manifest` | `eveclient_TQ.json` | Client manifest filename for resolving latest build |
 | `--refresh` | `false` | Force re-download of cached index files |
 | `--no-index` | `false` | Disable directory listing for paths ending in `/` |
+| `--transform-config` | *(disabled)* | Path to YAML transform rules file |
+
+## Transforms
+
+Optional file transforms run after assets are loaded from cache or CDN and before response headers (including `ETag`) are computed. Disk cache always stores raw CDN bytes; transforms apply on read.
+
+```bash
+go run ./cmd/eve-resfile-proxy --transform-config transforms.yaml
+```
+
+Example `transforms.yaml`:
+
+```yaml
+transforms:
+  - name: shader-fx
+    match:
+      path_prefix: "res:/shader/"
+      extensions: [".fx"]
+    command:
+      args: ["/path/to/shader-tool"]
+      timeout: 60s
+      max_output_bytes: 10485760
+
+  - name: hlsl-patch
+    match:
+      extensions: [".hlsl"]
+    wasm:
+      module: "./transforms/hlsl-patch.wasm"
+      fuel: 100000000
+      max_memory_bytes: 16777216
+```
+
+### Match fields
+
+Rules are evaluated in order; the first match wins. All specified match fields must match (`AND`):
+
+| Field | Semantics |
+|-------|-----------|
+| `path_prefix` | `res:/` path starts with prefix |
+| `path_glob` | Glob match (e.g. `res:/shader/**/*.fx`) |
+| `extensions` | File extension suffix (e.g. `.fx`) |
+| `filename` | Exact `res:/` path |
+
+### `command` backend
+
+Runs an external process for each matched asset:
+
+- **stdin:** raw file bytes
+- **stdout:** transformed bytes
+- **env:** `RES_PATH`, `CDN_PATH`, `EVE_PLATFORM`, `RULE_NAME`
+
+`command` has full host access — only use with trusted configs and scripts.
+
+### `wasm` backend
+
+Runs a WebAssembly module in-process via [wazero](https://wazero.io). Sandboxed (no filesystem, network, or subprocess). See [`examples/transform-wasm/README.md`](examples/transform-wasm/README.md) for the module ABI.
+
+Each rule must specify exactly one of `command` or `wasm`.
 
 ## Directory listing
 
@@ -93,10 +151,10 @@ internal/                  Index loader, fetch client, lookup
 Request pipeline (outer → inner):
 
 ```
-heartbeat → getonly → resolve → load → conditional → handler
+heartbeat → getonly → index → resolve → load → transform → conditional → handler
 ```
 
-`service.New` accepts functional options: `WithCache`, `WithFetch`, `WithMiddleware`.
+`service.New` accepts functional options: `WithCache`, `WithFetch`, `WithTransformEngine`, `WithMiddleware`.
 
 ## Index reference
 
@@ -137,6 +195,6 @@ When `--cache` is set:
 
 ## License
 
-EVE Online and related assets are property of CCP and its licensors. This tool is for development and research use.
+EVE Online and related assets are property of Fenris Creations.
 
 Third-party assets bundled with this project (such as directory listing icons) are licensed separately; see the attribution files alongside those assets.

@@ -20,6 +20,8 @@ type Config struct {
 	Platform     index.Platform
 	Refresh      bool
 	IndexListing bool
+
+	TransformConfig string
 }
 
 func (c Config) withDefaults() Config {

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/eve-online-tools/eve-resfile-proxy/internal/fetch"
+	"github.com/eve-online-tools/eve-resfile-proxy/internal/transform"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/assetcache"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware"
 )
@@ -15,6 +16,8 @@ type options struct {
 	cache *assetcache.Store
 
 	middlewares middleware.MiddlewareChain
+
+	transformEngine *transform.Engine
 }
 
 func WithHttpClient(client *http.Client) Option {
@@ -38,5 +41,11 @@ func WithCache(cache *assetcache.Store) Option {
 func WithMiddleware(middlewares middleware.Middleware) Option {
 	return func(o *options) {
 		o.middlewares = append(o.middlewares, middlewares)
+	}
+}
+
+func WithTransformEngine(engine *transform.Engine) Option {
+	return func(o *options) {
+		o.transformEngine = engine
 	}
 }

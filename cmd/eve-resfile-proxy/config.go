@@ -17,15 +17,16 @@ const (
 )
 
 type config struct {
-	Addr         string
-	CacheDir     string
-	BuildNumber  string
-	Platform     index.Platform
-	IndexOrigin  string
-	AssetOrigin  string
-	ManifestName string
-	Refresh      bool
-	IndexListing bool
+	Addr            string
+	CacheDir        string
+	BuildNumber     string
+	Platform        index.Platform
+	IndexOrigin     string
+	AssetOrigin     string
+	ManifestName    string
+	Refresh         bool
+	IndexListing    bool
+	TransformConfig string
 }
 
 func parseConfig() (*config, error) {
@@ -43,6 +44,7 @@ func parseConfig() (*config, error) {
 	flag.StringVar(&cfg.ManifestName, "manifest", defaultManifestName, "Client manifest filename")
 	flag.BoolVar(&cfg.Refresh, "refresh", false, "Force re-download of index files")
 	flag.BoolVar(&noIndex, "no-index", false, "Disable directory listing for paths ending in /")
+	flag.StringVar(&cfg.TransformConfig, "transform-config", "", "Path to YAML transform rules file")
 
 	flag.Parse()
 
@@ -76,5 +78,6 @@ func (c *config) serviceConfig() service.Config {
 		Platform:          c.Platform,
 		Refresh:           c.Refresh,
 		IndexListing:      c.IndexListing,
+		TransformConfig:   c.TransformConfig,
 	}
 }

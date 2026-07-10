@@ -30,7 +30,7 @@ jobs:
 
       - name: Check formatting
         if: matrix.task == 'format'
-        run: test -z "$(gofmt -l .)"
+        run: test -z "$(gofmt -l $(go list -f '{{.Dir}}' ./...))"
 
       - name: Run tests
         if: matrix.task == 'test'

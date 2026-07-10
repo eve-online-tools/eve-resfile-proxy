@@ -126,7 +126,7 @@ func (m *wasmModule) transform(ctx context.Context, in Input) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("instantiate wasm module: %w", err)
 	}
-	defer module.Close(runCtx)
+	defer func() { _ = module.Close(runCtx) }()
 
 	fn := module.ExportedFunction(m.cfg.Export)
 	if fn == nil {
@@ -163,6 +163,10 @@ func (m *wasmModule) transform(ctx context.Context, in Input) ([]byte, error) {
 
 	outLen := int32(results[0])
 	switch {
+	case outLen == wasmErrOutputTooLarge:
+		return nil, fmt.Errorf("transform output exceeds max_output_bytes (%d)", m.cfg.MaxOutputBytes)
+	case outLen == wasmErrInvalidOutput:
+		return nil, fmt.Errorf("transform returned invalid output")
 	case outLen < 0:
 		return nil, fmt.Errorf("transform returned error code %d", outLen)
 	case outLen == 0:

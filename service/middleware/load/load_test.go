@@ -1,6 +1,7 @@
 package load
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,12 @@ import (
 	"github.com/eve-online-tools/eve-resfile-proxy/service/assetcache"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/request"
 )
+
+type errTransport struct{}
+
+func (errTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("connection refused")
+}
 
 func TestMiddlewareCacheHit(t *testing.T) {
 	cacheDir := t.TempDir()
@@ -49,8 +56,9 @@ func TestMiddlewareCacheMissFetches(t *testing.T) {
 
 	cache := assetcache.New(t.TempDir())
 	client := &fetch.Client{
-		HTTP:      assetServer.Client(),
-		Semaphore: fetch.NewSemaphore(1),
+		HTTP:       assetServer.Client(),
+		Semaphore:  fetch.NewSemaphore(1),
+		MaxRetries: -1,
 	}
 
 	handler := Middleware(cache, client, assetServer.URL)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +91,9 @@ func TestMiddlewareNoCacheFetches(t *testing.T) {
 	defer assetServer.Close()
 
 	client := &fetch.Client{
-		HTTP:      assetServer.Client(),
-		Semaphore: fetch.NewSemaphore(1),
+		HTTP:       assetServer.Client(),
+		Semaphore:  fetch.NewSemaphore(1),
+		MaxRetries: -1,
 	}
 
 	handler := Middleware(nil, client, assetServer.URL)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,11 +122,12 @@ func TestMiddlewareNoCacheFetches(t *testing.T) {
 func TestMiddlewareFetchError(t *testing.T) {
 	cache := assetcache.New(t.TempDir())
 	client := &fetch.Client{
-		HTTP:      http.DefaultClient,
-		Semaphore: fetch.NewSemaphore(1),
+		HTTP:       &http.Client{Transport: errTransport{}},
+		Semaphore:  fetch.NewSemaphore(1),
+		MaxRetries: 0,
 	}
 
-	handler := Middleware(cache, client, "http://127.0.0.1:1")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Middleware(cache, client, "http://assets.test/")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("next should not be called")
 	}))
 

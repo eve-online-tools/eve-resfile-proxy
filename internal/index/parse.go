@@ -74,8 +74,8 @@ func ParseBuildIndex(content string) (map[string]Entry, error) {
 	return entries, nil
 }
 
-func ParseResfileIndex(content string) (map[string]string, error) {
-	entries := make(map[string]string)
+func ParseResfileIndex(content string) (map[string]Entry, error) {
+	entries := make(map[string]Entry)
 
 	for _, line := range strings.Split(content, "\n") {
 		entry, err := ParseIndexLine(line)
@@ -88,7 +88,9 @@ func ParseResfileIndex(content string) (map[string]string, error) {
 		if !strings.HasPrefix(entry.LogicalPath, "res:/") {
 			continue
 		}
-		entries[lookup.ResPathKey(entry.LogicalPath)] = entry.CDNPath
+		key := lookup.ResPathKey(entry.LogicalPath)
+		entry.LogicalPath = key
+		entries[key] = entry
 	}
 
 	return entries, nil

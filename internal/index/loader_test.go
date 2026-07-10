@@ -86,7 +86,7 @@ func TestLoadMacOSPlatform(t *testing.T) {
 func TestLoadUsesCacheFastPath(t *testing.T) {
 	cacheDir := t.TempDir()
 	build := "999"
-	merged := map[string]string{"res:/a.png": "a.png"}
+	merged := map[string]Entry{"res:/a.png": {CDNPath: "a.png"}}
 	if err := writePlatformMerged(platformMergedPath(cacheDir, build, PlatformWindows), merged); err != nil {
 		t.Fatalf("write merged: %v", err)
 	}

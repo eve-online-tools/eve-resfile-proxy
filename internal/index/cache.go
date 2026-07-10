@@ -55,7 +55,7 @@ func writeCachedText(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
-func readPlatformMerged(path string) (map[string]string, bool, error) {
+func readPlatformMerged(path string) (map[string]Entry, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -64,14 +64,23 @@ func readPlatformMerged(path string) (map[string]string, bool, error) {
 		return nil, false, err
 	}
 
-	var merged map[string]string
-	if err := json.Unmarshal(data, &merged); err != nil {
+	var merged map[string]Entry
+	if err := json.Unmarshal(data, &merged); err == nil {
+		return merged, true, nil
+	}
+
+	var legacy map[string]string
+	if err := json.Unmarshal(data, &legacy); err != nil {
 		return nil, false, fmt.Errorf("decode %s: %w", path, err)
+	}
+	merged = make(map[string]Entry, len(legacy))
+	for key, cdnPath := range legacy {
+		merged[key] = Entry{LogicalPath: key, CDNPath: cdnPath}
 	}
 	return merged, true, nil
 }
 
-func writePlatformMerged(path string, merged map[string]string) error {
+func writePlatformMerged(path string, merged map[string]Entry) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

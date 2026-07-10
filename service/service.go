@@ -15,6 +15,7 @@ import (
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/conditional"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/getonly"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/heartbeat"
+	indexmw "github.com/eve-online-tools/eve-resfile-proxy/service/middleware/index"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/load"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/middleware/resolve"
 )
@@ -57,6 +58,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Service, error) {
 		heartbeat.Middleware("/healthz"),
 		heartbeat.Middleware("/livez"),
 		getonly.Middleware,
+		indexmw.Middleware(cfg.IndexListing, indexSet),
 		resolve.Middleware(indexSet),
 		load.Middleware(o.cache, fetchClient, cfg.AssetOrigin),
 		conditional.Middleware,

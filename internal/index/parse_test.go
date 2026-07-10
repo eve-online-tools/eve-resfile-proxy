@@ -13,16 +13,26 @@ func TestParseIndexLine(t *testing.T) {
 	if entry.CDNPath != "icons/icon_123.png" {
 		t.Fatalf("cdn path = %q", entry.CDNPath)
 	}
+	if entry.Size != 4096 {
+		t.Fatalf("size = %d", entry.Size)
+	}
+	if entry.CompressedSize != 2048 {
+		t.Fatalf("compressed size = %d", entry.CompressedSize)
+	}
 }
 
 func TestParseResfileIndexLowercasesKeys(t *testing.T) {
-	content := "res:/Icons/64/Icon.PNG,icons/icon_123.png,hash\n"
+	content := "res:/Icons/64/Icon.PNG,icons/icon_123.png,hash,1024,512\n"
 	entries, err := ParseResfileIndex(content)
 	if err != nil {
 		t.Fatalf("ParseResfileIndex: %v", err)
 	}
-	if entries["res:/icons/64/icon.png"] != "icons/icon_123.png" {
+	entry, ok := entries["res:/icons/64/icon.png"]
+	if !ok || entry.CDNPath != "icons/icon_123.png" {
 		t.Fatalf("entries = %#v", entries)
+	}
+	if entry.Size != 1024 || entry.CompressedSize != 512 {
+		t.Fatalf("entry sizes = %d/%d", entry.Size, entry.CompressedSize)
 	}
 }
 

@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Directory Listing — {{.Path}}</title>
+    <style>
+      html {
+        scrollbar-gutter: stable;
+      }
+      body {
+        margin: 0;
+        padding: 2rem 1rem;
+        font-family: system-ui, sans-serif;
+        font-size: 1.0625rem;
+        line-height: 1.5;
+        color: #1a1a1a;
+        background: #fafafa;
+      }
+      .listing {
+        max-width: 1024px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: 1.75rem;
+        font-weight: 600;
+        text-align: center;
+      }
+      .breadcrumbs {
+        margin: 0 1rem 0.5rem;
+        color: #555;
+        word-break: break-all;
+        display: flex;
+        gap: 0.15em;
+      }
+      .breadcrumbs a {
+        color: #0b57d0;
+        text-decoration: none;
+      }
+      .breadcrumbs a:hover {
+        text-decoration: underline;
+      }
+      .breadcrumbs .sep {
+        color: #999;
+      }
+      .breadcrumbs .current {
+        color: #1a1a1a;
+        font-weight: 500;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      th,
+      td {
+        padding: 0.5rem 1rem;
+        text-align: left;
+        vertical-align: middle;
+      }
+      thead th {
+        background: #f3f3f3;
+        font-weight: 600;
+        border-bottom: 1px solid #e0e0e0;
+      }
+      tbody tr + tr td {
+        border-top: 1px solid #eee;
+      }
+      td.size,
+      td.compression,
+      th.size,
+      th.compression {
+        text-align: right;
+        white-space: nowrap;
+      }
+      td.name a {
+        color: #0b57d0;
+        text-decoration: none;
+      }
+      td.name a:hover {
+        text-decoration: underline;
+      }
+      img.icon {
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 0.5em;
+      }
+      .meta {
+        margin: 1rem 0 0;
+        font-size: 0.8125rem;
+        color: #888;
+        text-align: right;
+      }
+      @media (prefers-color-scheme: dark) {
+        html {
+          color-scheme: dark;
+        }
+        body {
+          background: #1a1a1a;
+          color: #e8e8e8;
+        }
+        .breadcrumbs {
+          color: #9aa0a6;
+        }
+        .breadcrumbs a {
+          color: #8ab4f8;
+        }
+        .breadcrumbs a:hover {
+          color: #aecbfb;
+        }
+        .breadcrumbs .sep {
+          color: #5f6368;
+        }
+        .breadcrumbs .current {
+          color: #e8e8e8;
+        }
+        .meta {
+          color: #9aa0a6;
+        }
+        table {
+          background: #242424;
+          border-color: #404040;
+        }
+        thead th {
+          background: #2e2e2e;
+          border-bottom-color: #404040;
+        }
+        tbody tr + tr td {
+          border-top-color: #333;
+        }
+        td.name a {
+          color: #8ab4f8;
+        }
+        td.name a:hover {
+          color: #aecbfb;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="listing">
+      <h1>Directory Listing</h1>
+      <nav class="breadcrumbs" aria-label="Path">
+        {{- range $i, $c := .Breadcrumbs }} {{- if $i }}<span class="sep"
+          >/</span
+        >{{ end -}} {{- if $c.Current }}
+        <span class="current">{{ $c.Label }}/</span>
+        {{- else }}
+        <a href="{{ $c.Href }}">{{ $c.Label }}</a>
+        {{- end }} {{- end }}
+      </nav>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th class="size">File Size</th>
+            <th class="compression">Compression</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{- if .Parent }}
+          <tr>
+            <td class="name">
+              <img
+                src="{{.ParentIcon}}"
+                alt=""
+                width="24"
+                height="24"
+                class="icon"
+              />
+              <a href="{{.Parent}}">Parent Directory</a>
+            </td>
+            <td>folder</td>
+            <td class="size">-</td>
+            <td class="compression">-</td>
+          </tr>
+          {{end -}} {{- range .Entries }}
+          <tr>
+            <td class="name">
+              <img src="{{.Icon}}" alt="" width="24" height="24" class="icon" />
+              <a href="{{.Href}}">{{.Label}}</a>
+            </td>
+            <td>{{.FileType}}</td>
+            <td class="size">{{.FileSize}}</td>
+            <td class="compression">{{.Compression}}</td>
+          </tr>
+          {{end -}}
+        </tbody>
+      </table>
+      <footer class="meta">Client build {{.BuildNumber}}</footer>
+    </main>
+  </body>
+</html>

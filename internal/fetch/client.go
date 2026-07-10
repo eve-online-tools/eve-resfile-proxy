@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	maxRetries          = 3
+	defaultMaxRetries   = 3
 	initialBackoff      = 250 * time.Millisecond
 	maxRetryAfter       = 30 * time.Second
 	defaultFetchTimeout = 30 * time.Second
@@ -18,9 +18,10 @@ const (
 )
 
 type Client struct {
-	HTTP      *http.Client
-	Semaphore *Semaphore
-	Timeout   time.Duration
+	HTTP       *http.Client
+	Semaphore  *Semaphore
+	Timeout    time.Duration
+	MaxRetries int // negative uses defaultMaxRetries
 }
 
 func NewClient() *Client {
@@ -29,9 +30,10 @@ func NewClient() *Client {
 
 func NewFromClient(client *http.Client) *Client {
 	return &Client{
-		HTTP:      client,
-		Semaphore: NewSemaphore(defaultConcurrency),
-		Timeout:   defaultFetchTimeout,
+		HTTP:       client,
+		Semaphore:  NewSemaphore(defaultConcurrency),
+		Timeout:    defaultFetchTimeout,
+		MaxRetries: -1,
 	}
 }
 
@@ -57,7 +59,11 @@ func (c *Client) getBytes(ctx context.Context, url string) ([]byte, error) {
 	}
 
 	var statusHistory []int
-	maxAttempts := maxRetries + 1
+	retries := defaultMaxRetries
+	if c.MaxRetries >= 0 {
+		retries = c.MaxRetries
+	}
+	maxAttempts := retries + 1
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if ctx.Err() != nil {
@@ -68,7 +74,7 @@ func (c *Client) getBytes(ctx context.Context, url string) ([]byte, error) {
 		body, status, retryAfter, err := c.doAttempt(reqCtx, url)
 		cancel()
 		if err != nil {
-			if attempt == maxRetries {
+			if attempt == retries {
 				return nil, fmt.Errorf("fetch %s after %d attempts: %w", url, maxAttempts, err)
 			}
 			if err := sleep(ctx, backoff(attempt)); err != nil {
@@ -86,7 +92,7 @@ func (c *Client) getBytes(ctx context.Context, url string) ([]byte, error) {
 			return nil, fmt.Errorf("fetch %s: not found (HTTP 404)", url)
 		}
 
-		if attempt == maxRetries {
+		if attempt == retries {
 			return nil, fmt.Errorf("fetch %s after %d attempts: HTTP %v", url, maxAttempts, statusHistory)
 		}
 

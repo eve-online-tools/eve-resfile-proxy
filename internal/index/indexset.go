@@ -2,7 +2,7 @@ package index
 
 type IndexSet struct {
 	BuildNumber     string
-	PlatformMaps    map[Platform]map[string]string
+	PlatformMaps    map[Platform]map[string]Entry
 	LoadedPlatforms []Platform
 }
 
@@ -12,8 +12,8 @@ func (s *IndexSet) Lookup(resPath string, pref Platform) (cdnPath string, hitPla
 		if !loaded {
 			continue
 		}
-		if cdn, found := m[resPath]; found {
-			return cdn, p, true
+		if entry, found := m[resPath]; found {
+			return entry.CDNPath, p, true
 		}
 	}
 	return "", "", false

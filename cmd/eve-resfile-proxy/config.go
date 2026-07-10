@@ -25,11 +25,14 @@ type config struct {
 	AssetOrigin  string
 	ManifestName string
 	Refresh      bool
+	IndexListing bool
 }
 
 func parseConfig() (*config, error) {
 	cfg := &config{}
 	var platform string
+
+	var noIndex bool
 
 	flag.StringVar(&cfg.Addr, "addr", defaultAddr, "HTTP listen address")
 	flag.StringVar(&cfg.CacheDir, "cache", "", "Cache directory for indexes and assets; omit to disable caching")
@@ -39,8 +42,11 @@ func parseConfig() (*config, error) {
 	flag.StringVar(&cfg.AssetOrigin, "asset-origin", defaultAssetOrigin, "EVE resources CDN origin")
 	flag.StringVar(&cfg.ManifestName, "manifest", defaultManifestName, "Client manifest filename")
 	flag.BoolVar(&cfg.Refresh, "refresh", false, "Force re-download of index files")
+	flag.BoolVar(&noIndex, "no-index", false, "Disable directory listing for paths ending in /")
 
 	flag.Parse()
+
+	cfg.IndexListing = !noIndex
 
 	parsed, err := index.ParsePlatform(platform)
 	if err != nil {
@@ -69,5 +75,6 @@ func (c *config) serviceConfig() service.Config {
 		ManifestName:      c.ManifestName,
 		Platform:          c.Platform,
 		Refresh:           c.Refresh,
+		IndexListing:      c.IndexListing,
 	}
 }

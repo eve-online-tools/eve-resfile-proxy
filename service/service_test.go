@@ -48,9 +48,9 @@ func TestHandlerServesAsset(t *testing.T) {
 	h := testHandler(
 		&index.IndexSet{
 			BuildNumber: "123",
-			PlatformMaps: map[index.Platform]map[string]string{
+			PlatformMaps: map[index.Platform]map[string]index.Entry{
 				index.PlatformWindows: {
-					"res:/icons/64/icon.png": "icons/icon.png",
+					"res:/icons/64/icon.png": {CDNPath: "icons/icon.png"},
 				},
 			},
 			LoadedPlatforms: []index.Platform{index.PlatformWindows},
@@ -130,7 +130,7 @@ func TestHandlerInvalidPlatform(t *testing.T) {
 
 func TestHandlerNotFound(t *testing.T) {
 	h := testHandler(&index.IndexSet{
-		PlatformMaps: map[index.Platform]map[string]string{
+		PlatformMaps: map[index.Platform]map[string]index.Entry{
 			index.PlatformWindows: {},
 		},
 	}, assetcache.New(t.TempDir()), nil, "")

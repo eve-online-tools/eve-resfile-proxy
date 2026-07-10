@@ -32,6 +32,20 @@ curl -o icon.png 'http://localhost:8080/icons/64/icon64.png'
 | `--asset-origin` | `https://resources.eveonline.com` | Resources CDN (assets) |
 | `--manifest` | `eveclient_TQ.json` | Client manifest filename for resolving latest build |
 | `--refresh` | `false` | Force re-download of cached index files |
+| `--no-index` | `false` | Disable directory listing for paths ending in `/` |
+
+## Directory listing
+
+By default, GET requests to paths ending in `/` return an HTML directory index (nginx/apache style) derived from the loaded resfile index. Subdirectories are listed first, then files, sorted alphabetically.
+
+```bash
+go run ./cmd/eve-resfile-proxy
+curl 'http://localhost:8080/icons/64/'
+```
+
+Pass `--no-index` to disable listing; trailing-slash paths then fall through to normal lookup and typically return 404.
+
+Directory rows include file-type icons from [vscode-icons](https://github.com/vscode-icons/vscode-icons) (v12.15.0). Icon assets are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see [`service/middleware/index/icons/ATTRIBUTION.md`](service/middleware/index/icons/ATTRIBUTION.md).
 
 ## Platform lookup
 
@@ -124,3 +138,5 @@ When `--cache` is set:
 ## License
 
 EVE Online and related assets are property of CCP and its licensors. This tool is for development and research use.
+
+Third-party assets bundled with this project (such as directory listing icons) are licensed separately; see the attribution files alongside those assets.

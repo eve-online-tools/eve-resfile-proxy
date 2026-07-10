@@ -4,14 +4,14 @@ import "testing"
 
 func TestIndexSetLookupCascade(t *testing.T) {
 	set := &IndexSet{
-		PlatformMaps: map[Platform]map[string]string{
+		PlatformMaps: map[Platform]map[string]Entry{
 			PlatformWindows: {
-				"res:/shared.png":   "win/shared.png",
-				"res:/win-only.png": "win/only.png",
+				"res:/shared.png":   {CDNPath: "win/shared.png"},
+				"res:/win-only.png": {CDNPath: "win/only.png"},
 			},
 			PlatformMacOS: {
-				"res:/shared.png":   "mac/shared.png",
-				"res:/mac-only.png": "mac/only.png",
+				"res:/shared.png":   {CDNPath: "mac/shared.png"},
+				"res:/mac-only.png": {CDNPath: "mac/only.png"},
 			},
 		},
 		LoadedPlatforms: []Platform{PlatformWindows, PlatformMacOS},

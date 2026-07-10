@@ -19,6 +19,7 @@ type Config struct {
 	ManifestName string
 	Platform     index.Platform
 	Refresh      bool
+	IndexListing bool
 }
 
 func (c Config) withDefaults() Config {

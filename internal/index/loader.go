@@ -43,7 +43,7 @@ func Load(ctx context.Context, opts LoaderOptions) (*IndexSet, error) {
 
 	set := &IndexSet{
 		BuildNumber:     buildNumber,
-		PlatformMaps:    make(map[Platform]map[string]string),
+		PlatformMaps:    make(map[Platform]map[string]Entry),
 		LoadedPlatforms: make([]Platform, 0, len(platforms)),
 	}
 
@@ -102,7 +102,7 @@ func tryLoadFromCache(cacheDir, buildNumber string, platforms []Platform, refres
 
 	set := &IndexSet{
 		BuildNumber:     buildNumber,
-		PlatformMaps:    make(map[Platform]map[string]string),
+		PlatformMaps:    make(map[Platform]map[string]Entry),
 		LoadedPlatforms: make([]Platform, 0, len(platforms)),
 	}
 
@@ -121,7 +121,7 @@ func tryLoadFromCache(cacheDir, buildNumber string, platforms []Platform, refres
 	return set, true, nil
 }
 
-func loadPlatform(ctx context.Context, fetcher TextFetcher, opts LoaderOptions, buildNumber string, p Platform) (map[string]string, int, error) {
+func loadPlatform(ctx context.Context, fetcher TextFetcher, opts LoaderOptions, buildNumber string, p Platform) (map[string]Entry, int, error) {
 	if opts.CacheDir != "" {
 		if err := ensureDir(platformCacheDir(opts.CacheDir, buildNumber, p)); err != nil {
 			return nil, 0, err
@@ -154,7 +154,7 @@ func loadPlatform(ctx context.Context, fetcher TextFetcher, opts LoaderOptions, 
 		return nil, 0, err
 	}
 
-	var osMap map[string]string
+	var osMap map[string]Entry
 	if osEntry, ok := FindBuildIndexEntry(buildEntries, paths.OSSpecific); ok {
 		osContent, err := loadResfileCSV(ctx, fetcher, opts, buildNumber, p, osEntry.CDNPath, resfileOSPath(opts.CacheDir, buildNumber, p))
 		if err != nil {

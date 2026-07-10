@@ -39,7 +39,7 @@ func TestMiddlewareNotFoundPath(t *testing.T) {
 
 func TestMiddlewareIndexMiss(t *testing.T) {
 	handler := Middleware(&index.IndexSet{
-		PlatformMaps: map[index.Platform]map[string]string{
+		PlatformMaps: map[index.Platform]map[string]index.Entry{
 			index.PlatformWindows: {},
 		},
 	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,9 +57,9 @@ func TestMiddlewareIndexMiss(t *testing.T) {
 
 func TestMiddlewareSetsContext(t *testing.T) {
 	indexSet := &index.IndexSet{
-		PlatformMaps: map[index.Platform]map[string]string{
+		PlatformMaps: map[index.Platform]map[string]index.Entry{
 			index.PlatformWindows: {
-				"res:/icons/64/icon.png": "icons/icon.png",
+				"res:/icons/64/icon.png": {CDNPath: "icons/icon.png"},
 			},
 		},
 	}

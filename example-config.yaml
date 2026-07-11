@@ -1,0 +1,35 @@
+# Example configuration for eve-resfile-proxy.
+# Start with: go run ./cmd/eve-resfile-proxy --config example-config.yaml
+
+server: tranquility
+addr: ":8080"
+
+# Optional: pin to a specific client build (omit for latest TQ).
+# build: "1234567"
+
+# Optional: load indexes for specific platforms only.
+# platforms:
+#   - windows
+#   - macos
+
+# Optional: enable on-disk caching for indexes and assets.
+cache: .cache
+
+# debug: false
+
+# Optional: Disable directory listings
+# no_index: false
+
+# Optional: load the full binaries/resources tree.
+#           This moves the resources under /res/, and enables access to
+#           the /app/ binaries distribution.
+# Note: this will affect your paths for rewrites and transforms!
+# full_tree: false
+
+# Optional: apply rewrites to the resfile index.
+rewrites:
+  - from: favicon.ico
+    to: ui/texture/icons/icons111_07.png # Fedo is love, fedo is life.
+
+# Optional: apply transforms to the resfile index.
+transforms: []

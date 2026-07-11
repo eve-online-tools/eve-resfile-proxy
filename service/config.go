@@ -1,32 +1,22 @@
 package service
 
 import (
-	"time"
-
-	"github.com/eve-online-tools/eve-resfile-proxy/internal/index"
+	"github.com/eve-online-tools/eve-resfile-proxy/common/platform"
+	svchttp "github.com/eve-online-tools/eve-resfile-proxy/service/http"
+	"github.com/eve-online-tools/eve-resfile-proxy/vfs/rewrite"
+	vfstransform "github.com/eve-online-tools/eve-resfile-proxy/vfs/transform"
 )
 
-const defaultReadHeaderTimeout = 10 * time.Second
-
 type Config struct {
-	Addr              string
-	ReadHeaderTimeout time.Duration
+	ServerName      string
+	BuildNumber     string
+	Platforms       []platform.Platform
+	CacheDir        string
+	FullTree        bool
+	Rewrites        []rewrite.Rule
+	Transforms      []vfstransform.Transform
+	TransformLimits vfstransform.Limits
+	ConfigDir       string
 
-	CacheDir     string
-	BuildNumber  string
-	IndexOrigin  string
-	AssetOrigin  string
-	ManifestName string
-	Platform     index.Platform
-	Refresh      bool
-	IndexListing bool
-
-	TransformConfig string
-}
-
-func (c Config) withDefaults() Config {
-	if c.ReadHeaderTimeout == 0 {
-		c.ReadHeaderTimeout = defaultReadHeaderTimeout
-	}
-	return c
+	ServerConfig svchttp.ServerConfig
 }

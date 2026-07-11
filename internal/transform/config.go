@@ -24,6 +24,7 @@ type fileConfig struct {
 
 type ruleConfig struct {
 	Name    string         `yaml:"name"`
+	Stable  *bool          `yaml:"stable,omitempty"`
 	Match   matchConfig    `yaml:"match"`
 	Command *commandConfig `yaml:"command"`
 	Wasm    *wasmConfig    `yaml:"wasm"`
@@ -111,6 +112,13 @@ func validateConfig(cfg *fileConfig) error {
 	}
 
 	return nil
+}
+
+func (r ruleConfig) isStable() bool {
+	if r.Stable == nil {
+		return true
+	}
+	return *r.Stable
 }
 
 func (r ruleConfig) matchSpec() matchSpec {

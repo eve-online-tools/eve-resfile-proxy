@@ -18,11 +18,11 @@ func Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		asset.ETag = etagFor(asset.Data)
+		asset.ETag = ETagFor(asset.Data)
 		ctx := request.WithAsset(r.Context(), asset)
 
-		if isNotModified(r, asset.ETag, asset.LastModified) {
-			writeNotModified(w, asset)
+		if IsNotModified(r, asset.ETag, asset.LastModified) {
+			WriteNotModified(w, asset)
 			return
 		}
 
@@ -30,12 +30,12 @@ func Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func etagFor(data []byte) string {
+func ETagFor(data []byte) string {
 	sum := sha256.Sum256(data)
 	return fmt.Sprintf(`"%x"`, sum)
 }
 
-func isNotModified(r *http.Request, etag string, lastModified time.Time) bool {
+func IsNotModified(r *http.Request, etag string, lastModified time.Time) bool {
 	if match := r.Header.Get("If-None-Match"); match != "" {
 		if etagMatches(match, etag) {
 			return true
@@ -66,7 +66,7 @@ func etagMatches(header, etag string) bool {
 	return false
 }
 
-func writeNotModified(w http.ResponseWriter, asset request.Asset) {
+func WriteNotModified(w http.ResponseWriter, asset request.Asset) {
 	if asset.ETag != "" {
 		w.Header().Set("ETag", asset.ETag)
 	}

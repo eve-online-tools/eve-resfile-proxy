@@ -14,6 +14,8 @@ By default caching is **disabled** — indexes and assets are fetched from CDN o
 go run ./cmd/eve-resfile-proxy --cache .cache/eve-resfile-proxy
 ```
 
+You can also point `--cache` at the EVE Launcher's `ResFiles` directory to reuse assets the client has already downloaded — see [Reusing the EVE client cache](#reusing-the-eve-client-cache).
+
 Then fetch an asset:
 
 ```bash
@@ -37,10 +39,10 @@ curl -o icon.png 'http://localhost:8080/icons/64/icon64.png'
 
 ## Transforms
 
-Optional file transforms run after assets are loaded from cache or CDN and before response headers (including `ETag`) are computed. Disk cache always stores raw CDN bytes; transforms apply on read.
+Optional file transforms run after assets are loaded from cache or CDN and before response headers (including `ETag`) are computed. The asset disk cache always stores raw CDN bytes; transforms apply on read. When `--cache` is set, transform outputs are also cached on disk under `_transformed/`.
 
 ```bash
-go run ./cmd/eve-resfile-proxy --transform-config transforms.yaml
+go run ./cmd/eve-resfile-proxy --cache .cache/eve-resfile-proxy --transform-config transforms.yaml
 ```
 
 Example `transforms.yaml`:
@@ -56,6 +58,13 @@ transforms:
       timeout: 60s
       max_output_bytes: 10485760
 
+  - name: dynamic-overlay
+    stable: false
+    match:
+      extensions: [".json"]
+    command:
+      args: ["/path/to/non-deterministic-tool"]
+
   - name: hlsl-patch
     match:
       extensions: [".hlsl"]
@@ -65,12 +74,21 @@ transforms:
       max_memory_bytes: 16777216
 ```
 
+### Stability and transform cache
+
+Rules are **stable** (and disk-cacheable) by default. Set `stable: false` on a rule to always run it fresh — use this for non-deterministic `command` transforms.
+
+Transform disk caching requires `--cache`. Cached entries are keyed by `(platform, ruleName, cdnPath)`; CDN paths are content-addressed, so new asset versions get new cache paths automatically.
+
+Transformed files are cached under `_transformed/`, this directory can be cleared to force regeneration;.
+
 ### Match fields
 
 Rules are evaluated in order; the first match wins. All specified match fields must match (`AND`):
 
 | Field | Semantics |
 |-------|-----------|
+| `stable` | When `false`, skip transform disk cache (default: cacheable) |
 | `path_prefix` | `res:/` path starts with prefix |
 | `path_glob` | Glob match (e.g. `res:/shader/**/*.fx`) |
 | `extensions` | File extension suffix (e.g. `.fx`) |
@@ -176,11 +194,18 @@ Build number from `eveclient_TQ.json` unless `--build` is set.
 
 ## Cache layout
 
-When `--cache` is set:
+When `--cache` is set, one directory holds both index metadata and asset bytes:
 
 ```
 <cache>/
-  <build>/
+  _transformed/               # transformed asset bytes (when --transform-config is set)
+    windows/
+      shader-fx/
+        7d/7d87a0a3a100cf9f_00b8308223bd89d4db39914d2c6488a3
+    macos/
+      hlsl-patch/
+        a9/a9d1721dd5cc6d54_e6bbb2df307e5a9527159a4c971034b5
+  <build>/                    # index metadata (per client build)
     windows/
       build-index.txt
       resfileindex-global.txt
@@ -189,9 +214,27 @@ When `--cache` is set:
     macos/
       ...
     meta.json
-  <cdnPath>/          # asset bytes, CDN hash layout
-    7d/7d87a0a3...
+  <cdnPath>                   # asset bytes, CDN hash layout
+    7d/7d87a0a3a100cf9f_00b8308223bd89d4db39914d2c6488a3
+    a9/a9d1721dd5cc6d54_e6bbb2df307e5a9527159a4c971034b5
+    ...
 ```
+
+Asset paths mirror the CDN: resfile index entries map `res:/…` logical paths to `<prefix>/<hash>_<checksum>` files under the cache root (first two hex digits as the subdirectory).
+
+### Reusing the EVE client cache
+
+The EVE Launcher downloads resource files into a shared **ResFiles** directory. Its layout matches the proxy asset cache exactly — each CDN path from the resfile index is a file at `<cache>/<cdnPath>`.
+
+If you have your launcher configured (you can see this in **Settings → EVE Online → Shared cache location**) to e.g. `E:\EVE Online`, you can use `--cache E:\EVE Online\ResFiles\` to re-use the launcher/client cache
+
+Assets present on disk are served as cache `HIT`s (`X-Cache-Status: HIT`); missing assets are fetched from the CDN and written into the same tree, so the launcher and proxy share downloads.
+
+**Notes:**
+
+- `--cache` also stores index metadata under `<cache>/<build>/` and transform outputs under `<cache>/_transformed/`. Build directories (numeric, e.g. `3141592`) sit alongside the hex prefix folders (`00`–`ff`) and the launcher's own entries (such as `bundles/`). This is harmless but means the proxy adds a few small text/JSON files per build.
+- Pin `--build` to match your installed client if you want index metadata to align with the game version you have cached.
+- Use `--refresh` to force re-download of index files when a new client build ships.
 
 ## License
 

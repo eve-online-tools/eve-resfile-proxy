@@ -43,7 +43,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Service, error) {
 	transformEngine := o.transformEngine
 	if transformEngine == nil && cfg.TransformConfig != "" {
 		var loadErr error
-		transformEngine, loadErr = transform.LoadEngine(cfg.TransformConfig)
+		transformEngine, loadErr = transform.LoadEngine(cfg.TransformConfig, cfg.CacheDir)
 		if loadErr != nil {
 			return nil, fmt.Errorf("load transform config: %w", loadErr)
 		}

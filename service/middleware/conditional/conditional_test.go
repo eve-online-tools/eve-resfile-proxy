@@ -11,7 +11,7 @@ import (
 
 func TestMiddlewareIfNoneMatchReturns304(t *testing.T) {
 	data := []byte("png-data")
-	etag := etagFor(data)
+	etag := ETagFor(data)
 
 	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("next should not be called")

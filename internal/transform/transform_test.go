@@ -30,8 +30,8 @@ transforms:
 	if err != nil {
 		t.Fatalf("transform: %v", err)
 	}
-	if string(out) != "in" {
-		t.Fatalf("unexpected output %q", out)
+	if string(out.Data) != "in" {
+		t.Fatalf("unexpected output %q", out.Data)
 	}
 
 	unchanged, err := engine.Transform(context.Background(), transform.Input{
@@ -41,8 +41,8 @@ transforms:
 	if err != nil {
 		t.Fatalf("transform: %v", err)
 	}
-	if string(unchanged) != "raw" {
-		t.Fatalf("expected unchanged data, got %q", unchanged)
+	if string(unchanged.Data) != "raw" {
+		t.Fatalf("expected unchanged data, got %q", unchanged.Data)
 	}
 }
 
@@ -82,8 +82,8 @@ transforms:
 	if err != nil {
 		t.Fatalf("transform: %v", err)
 	}
-	if string(out) != "ok" {
-		t.Fatalf("got %q", out)
+	if string(out.Data) != "ok" {
+		t.Fatalf("got %q", out.Data)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestFirstMatchWins(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	engine := mustLoadEngineFromDir(t, dir, `
+	engine := mustLoadEngineFromDir(t, dir, "", `
 transforms:
   - name: first
     match:
@@ -115,8 +115,8 @@ transforms:
 	if err != nil {
 		t.Fatalf("transform: %v", err)
 	}
-	if string(out) != "ABC" {
-		t.Fatalf("got %q", out)
+	if string(out.Data) != "ABC" {
+		t.Fatalf("got %q", out.Data)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestConfigValidation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeConfig(t, tc.yaml)
-			if _, err := transform.LoadEngine(path); err == nil {
+			if _, err := transform.LoadEngine(path, ""); err == nil {
 				t.Fatal("expected error")
 			}
 		})
@@ -172,7 +172,7 @@ func TestCommandTransform(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	engine := mustLoadEngineFromDir(t, dir, `
+	engine := mustLoadEngineFromDir(t, dir, "", `
 transforms:
   - name: append
     match:
@@ -190,8 +190,8 @@ transforms:
 	if err != nil {
 		t.Fatalf("transform: %v", err)
 	}
-	if string(out) != "bodysuffix" {
-		t.Fatalf("got %q", out)
+	if string(out.Data) != "bodysuffix" {
+		t.Fatalf("got %q", out.Data)
 	}
 }
 
@@ -225,7 +225,7 @@ func TestWasmTransformCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	engine := mustLoadEngineFromDir(t, dir, `
+	engine := mustLoadEngineFromDir(t, dir, "", `
 transforms:
   - name: copy
     match:
@@ -243,20 +243,161 @@ transforms:
 	if err != nil {
 		t.Fatalf("transform: %v", err)
 	}
-	if string(out) != "hello" {
-		t.Fatalf("got %q", out)
+	if string(out.Data) != "hello" {
+		t.Fatalf("got %q", out.Data)
+	}
+}
+
+func TestDiskCacheHitOnSecondTransform(t *testing.T) {
+	dir := t.TempDir()
+	cacheDir := t.TempDir()
+	script := filepath.Join(dir, "upper.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\ntr 'a-z' 'A-Z'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := mustLoadEngineFromDir(t, dir, cacheDir, `
+transforms:
+  - name: upper
+    match:
+      extensions: [".txt"]
+    command:
+      args: ["`+script+`"]
+`)
+
+	in := transform.Input{
+		ResPath:  "res:/foo.txt",
+		CDNPath:  "aa/bb",
+		Platform: index.PlatformWindows,
+		Data:     []byte("abc"),
+	}
+
+	first, err := engine.Transform(context.Background(), in)
+	if err != nil {
+		t.Fatalf("first transform: %v", err)
+	}
+	if first.FromCache {
+		t.Fatal("expected cache miss on first transform")
+	}
+	if string(first.Data) != "ABC" {
+		t.Fatalf("first data = %q", first.Data)
+	}
+
+	second, err := engine.Transform(context.Background(), in)
+	if err != nil {
+		t.Fatalf("second transform: %v", err)
+	}
+	if !second.FromCache {
+		t.Fatal("expected cache hit on second transform")
+	}
+	if string(second.Data) != "ABC" {
+		t.Fatalf("second data = %q", second.Data)
+	}
+}
+
+func TestStableFalseSkipsDiskCache(t *testing.T) {
+	dir := t.TempDir()
+	cacheDir := t.TempDir()
+	countFile := filepath.Join(dir, "count.txt")
+	script := filepath.Join(dir, "count.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 1 >> "+countFile+"\ntr 'a-z' 'A-Z'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := mustLoadEngineFromDir(t, dir, cacheDir, `
+transforms:
+  - name: upper
+    stable: false
+    match:
+      extensions: [".txt"]
+    command:
+      args: ["`+script+`"]
+`)
+
+	in := transform.Input{
+		ResPath:  "res:/foo.txt",
+		CDNPath:  "aa/bb",
+		Platform: index.PlatformWindows,
+		Data:     []byte("abc"),
+	}
+
+	for i := 0; i < 2; i++ {
+		result, err := engine.Transform(context.Background(), in)
+		if err != nil {
+			t.Fatalf("transform %d: %v", i+1, err)
+		}
+		if result.FromCache {
+			t.Fatalf("transform %d: unexpected cache hit", i+1)
+		}
+		if string(result.Data) != "ABC" {
+			t.Fatalf("transform %d data = %q", i+1, result.Data)
+		}
+	}
+
+	count, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatalf("read count: %v", err)
+	}
+	if string(count) != "1\n1\n" {
+		t.Fatalf("command invocations = %q", count)
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "_transformed")); !os.IsNotExist(err) {
+		t.Fatal("expected no transform cache directory")
+	}
+}
+
+func TestNoDiskCacheWhenCacheRootEmpty(t *testing.T) {
+	dir := t.TempDir()
+	countFile := filepath.Join(dir, "count.txt")
+	script := filepath.Join(dir, "count.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 1 >> "+countFile+"\ncat\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := mustLoadEngineFromDir(t, dir, "", `
+transforms:
+  - name: cat
+    match:
+      extensions: [".txt"]
+    command:
+      args: ["`+script+`"]
+`)
+
+	in := transform.Input{
+		ResPath:  "res:/foo.txt",
+		CDNPath:  "aa/bb",
+		Platform: index.PlatformWindows,
+		Data:     []byte("abc"),
+	}
+
+	for i := 0; i < 2; i++ {
+		result, err := engine.Transform(context.Background(), in)
+		if err != nil {
+			t.Fatalf("transform %d: %v", i+1, err)
+		}
+		if result.FromCache {
+			t.Fatalf("transform %d: unexpected cache hit", i+1)
+		}
+	}
+
+	count, err := os.ReadFile(countFile)
+	if err != nil {
+		t.Fatalf("read count: %v", err)
+	}
+	if string(count) != "1\n1\n" {
+		t.Fatalf("command invocations = %q", count)
 	}
 }
 
 func mustLoadEngine(t *testing.T, yaml string) *transform.Engine {
 	t.Helper()
-	return mustLoadEngineFromDir(t, t.TempDir(), yaml)
+	return mustLoadEngineFromDir(t, t.TempDir(), "", yaml)
 }
 
-func mustLoadEngineFromDir(t *testing.T, dir, yaml string) *transform.Engine {
+func mustLoadEngineFromDir(t *testing.T, dir, cacheRoot, yaml string) *transform.Engine {
 	t.Helper()
 	path := writeConfigInDir(t, dir, yaml)
-	engine, err := transform.LoadEngine(path)
+	engine, err := transform.LoadEngine(path, cacheRoot)
 	if err != nil {
 		t.Fatalf("load engine: %v", err)
 	}

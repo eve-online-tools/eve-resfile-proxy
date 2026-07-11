@@ -6,13 +6,18 @@ import (
 )
 
 // LoadEngine reads transform rules from path and prepares command and wasm backends.
-func LoadEngine(path string) (*Engine, error) {
+// When cacheRoot is non-empty, stable rules cache transformed output on disk.
+func LoadEngine(path string, cacheRoot string) (*Engine, error) {
 	cfg, baseDir, err := LoadConfig(path)
 	if err != nil {
 		return nil, err
 	}
 
 	engine := &Engine{}
+	if cacheRoot != "" {
+		engine.diskCache = &DiskCache{Root: cacheRoot}
+	}
+
 	closers := []func(context.Context) error{}
 
 	for _, rule := range cfg.Transforms {
@@ -40,6 +45,7 @@ func LoadEngine(path string) (*Engine, error) {
 
 		engine.rules = append(engine.rules, compiledRule{
 			name:    rule.Name,
+			stable:  rule.isStable(),
 			matcher: m,
 			run:     run,
 		})

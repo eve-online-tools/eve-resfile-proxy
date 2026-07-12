@@ -1,14 +1,20 @@
 # eve-resfile-proxy
 
-A local HTTP proxy for EVE Online client resource files (`res:/` paths). Maps bare URL paths to CDN assets via the official resfile indexes.
+A local HTTP proxy for EVE Online client resource files. Maps URL paths to CDN assets via the official resfile indexes.
 
 ## Quick start
+
+```bash
+go run ./cmd/eve-resfile-proxy --config example-config.yaml
+```
+
+Or with flags only:
 
 ```bash
 go run ./cmd/eve-resfile-proxy
 ```
 
-By default caching is **disabled** — indexes and assets are fetched from CDN on each run/request. Enable disk caching with `--cache`:
+By default caching is **disabled** — indexes and assets are fetched from CDN on each run/request. Enable disk caching with `--cache` or a `cache:` entry in the config file:
 
 ```bash
 go run ./cmd/eve-resfile-proxy --cache .cache/eve-resfile-proxy
@@ -22,65 +28,127 @@ Then fetch an asset:
 curl -o icon.png 'http://localhost:8080/icons/64/icon64.png'
 ```
 
-## Flags
+## Configuration
+
+Settings can come from a YAML config file, CLI flags, or both. When both are used, flags override values loaded from the file.
+
+```bash
+go run ./cmd/eve-resfile-proxy --config example-config.yaml
+```
+
+Example `example-config.yaml`:
+
+```yaml
+server: tranquility
+addr: ":8080"
+
+# Optional: pin to a specific client build (omit for latest TQ build).
+# build: "1234567"
+
+# Optional: load indexes for specific platforms only.
+# platforms:
+#   - windows
+#   - macos
+
+cache: .cache
+
+# debug: false
+# no_index: false
+
+# Optional: expose the full app and res trees under /app/ and /res/.
+# full_tree: false
+
+rewrites:
+  - from: favicon.ico
+    to: ui/texture/icons/icons111_07.png
+
+transform_limits:
+  max_output_bytes: 134217728   # 128 MiB (default)
+  max_memory_bytes: 134217728   # WASM guest memory cap (default)
+  fuel: 100000000               # WASM execution budget (default)
+
+transforms: []
+```
+
+Relative paths in config (for example WASM module paths) resolve against the config file directory.
+
+### Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--config` | *(none)* | Path to YAML config file |
+| `--server` | `tranquility` | EVE server name (`tranquility`, `singularity`, …) |
 | `--addr` | `:8080` | HTTP listen address |
-| `--cache` | *(disabled)* | Cache directory for indexes and assets; omit to disable caching |
-| `--build` | *(latest TQ)* | Pin to a specific client build number |
-| `--platform` | *(both)* | Load indexes for one platform only: `windows` or `macos` |
-| `--index-origin` | `https://binaries.eveonline.com` | Binaries CDN (indexes) |
-| `--asset-origin` | `https://resources.eveonline.com` | Resources CDN (assets) |
-| `--manifest` | `eveclient_TQ.json` | Client manifest filename for resolving latest build |
-| `--refresh` | `false` | Force re-download of cached index files |
+| `--cache` | *(disabled)* | Cache directory for indexes and assets |
+| `--build` | *(latest)* | Pin to a specific client build number |
+| `--platforms` | *(all available)* | Comma-separated platforms to load (`windows`, `macOS`) |
+| `--full-tree` | `false` | Expose full app and res filesystem trees |
+| `--debug` | `false` | Enable debug logging |
 | `--no-index` | `false` | Disable directory listing for paths ending in `/` |
-| `--transform-config` | *(disabled)* | Path to YAML transform rules file |
+
+## URL paths
+
+By default, resource files are served from the URL root:
+
+```bash
+curl 'http://localhost:8080/icons/64/icon64.png'
+```
+
+With `full_tree: true`, the binary distribution is mounted under `/app/<platform>/` and resource files under `/res/`:
+
+```bash
+curl 'http://localhost:8080/res/icons/64/icon64.png'
+curl 'http://localhost:8080/app/windows/resfileindex.txt'
+```
+
+Rewrites and transform match paths use the same logical paths exposed by the HTTP server (without a leading slash).
+
+## Rewrites
+
+Optional path aliases are applied before transforms. A rewrite maps a path prefix onto another path; the longest matching `from` wins.
+
+```yaml
+rewrites:
+  - from: favicon.ico
+    to: ui/texture/icons/icons111_07.png
+  - from: legacy/icons
+    to: icons
+```
+
+Rewrites appear in directory listings and participate in glob matching, so aliased paths behave like real files in the index.
 
 ## Transforms
 
-Optional file transforms run after assets are loaded from cache or CDN and before response headers (including `ETag`) are computed. The asset disk cache always stores raw CDN bytes; transforms apply on read. When `--cache` is set, transform outputs are also cached on disk under `_transformed/`.
-
-```bash
-go run ./cmd/eve-resfile-proxy --cache .cache/eve-resfile-proxy --transform-config transforms.yaml
-```
-
-Example `transforms.yaml`:
+Optional file transforms run when assets are read from the underlying filesystem, after cache/CDN fetch and before response headers (including `ETag`) are computed. The asset disk cache always stores raw CDN bytes; transforms apply on read. When caching is enabled, transform outputs are also cached on disk under `_transformed/`.
 
 ```yaml
+transform_limits:
+  max_output_bytes: 10485760
+  max_memory_bytes: 16777216
+  fuel: 100000000
+
 transforms:
   - name: shader-fx
     match:
-      path_prefix: "res:/shader/"
+      path_prefix: shader/
       extensions: [".fx"]
     command:
       args: ["/path/to/shader-tool"]
       timeout: 60s
-      max_output_bytes: 10485760
-
-  - name: dynamic-overlay
-    stable: false
-    match:
-      extensions: [".json"]
-    command:
-      args: ["/path/to/non-deterministic-tool"]
 
   - name: hlsl-patch
     match:
       extensions: [".hlsl"]
     wasm:
       module: "./transforms/hlsl-patch.wasm"
-      fuel: 100000000
-      max_memory_bytes: 16777216
+      export: transform
 ```
 
-### Stability and transform cache
+### Transform cache
 
-Rules are **stable** (and disk-cacheable) by default. Set `stable: false` on a rule to always run it fresh — use this for non-deterministic `command` transforms.
+Transform disk caching requires a cache directory. Cached entries are keyed by `(ruleName, cdnPath)`; CDN paths are content-addressed, so new asset versions get new cache paths automatically.
 
-Transform disk caching requires `--cache`. Cached entries are keyed by `(platform, ruleName, cdnPath)`; CDN paths are content-addressed, so new asset versions get new cache paths automatically.
-
-Transformed files are cached under `_transformed/`, this directory can be cleared to force regeneration;.
+Transformed files are stored under `_transformed/<ruleName>/<cdnPath>` with an adjacent `.md5sum` sidecar. Delete `_transformed/` to force regeneration.
 
 ### Match fields
 
@@ -88,11 +156,18 @@ Rules are evaluated in order; the first match wins. All specified match fields m
 
 | Field | Semantics |
 |-------|-----------|
-| `stable` | When `false`, skip transform disk cache (default: cacheable) |
-| `path_prefix` | `res:/` path starts with prefix |
-| `path_glob` | Glob match (e.g. `res:/shader/**/*.fx`) |
+| `path_prefix` | Path starts with prefix |
+| `path_glob` | Glob match (e.g. `shader/**/*.fx`) |
 | `extensions` | File extension suffix (e.g. `.fx`) |
-| `filename` | Exact `res:/` path |
+| `filename` | Exact path |
+
+### Global limits (`transform_limits`)
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `max_output_bytes` | 128 MiB | Maximum transform output size (command and WASM) |
+| `max_memory_bytes` | 128 MiB | Maximum WASM guest memory |
+| `fuel` | 100000000 | WASM execution budget; maps to a wall-clock timeout on the transform call |
 
 ### `command` backend
 
@@ -100,13 +175,20 @@ Runs an external process for each matched asset:
 
 - **stdin:** raw file bytes
 - **stdout:** transformed bytes
-- **env:** `RES_PATH`, `CDN_PATH`, `EVE_PLATFORM`, `RULE_NAME`
+- **env:** `RES_PATH`, `CDN_PATH`, `RULE_NAME`
 
 `command` has full host access — only use with trusted configs and scripts.
 
 ### `wasm` backend
 
-Runs a WebAssembly module in-process via [wazero](https://wazero.io). Sandboxed (no filesystem, network, or subprocess). See [`examples/transform-wasm/README.md`](examples/transform-wasm/README.md) for the module ABI.
+Runs a WebAssembly module in-process via [wazero](https://wazero.io). Sandboxed (no filesystem, network, or subprocess). Module paths are relative to the config file directory unless absolute.
+
+Guest ABI (see also [`vfs/transform/wasm_abi.go`](vfs/transform/wasm_abi.go)):
+
+- Export `transform(in_ptr, in_len, out_ptr, out_max) -> i32`
+- Optional imports `env.get_res_path` and `env.get_cdn_path`
+
+The fuel-derived timeout applies only to the WASM `transform` call itself, not module instantiation or memory setup.
 
 Each rule must specify exactly one of `command` or `wasm`.
 
@@ -115,27 +197,28 @@ Each rule must specify exactly one of `command` or `wasm`.
 By default, GET requests to paths ending in `/` return an HTML directory index (nginx/apache style) derived from the loaded resfile index. Subdirectories are listed first, then files, sorted alphabetically.
 
 ```bash
-go run ./cmd/eve-resfile-proxy
+go run ./cmd/eve-resfile-proxy --config example-config.yaml
 curl 'http://localhost:8080/icons/64/'
 ```
 
-Pass `--no-index` to disable listing; trailing-slash paths then fall through to normal lookup and typically return 404.
+Pass `--no-index` or set `no_index: true` to disable listing; trailing-slash paths then fall through to normal lookup and typically return 404.
 
-Directory rows include file-type icons from [vscode-icons](https://github.com/vscode-icons/vscode-icons) (v12.15.0). Icon assets are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see [`service/middleware/index/icons/ATTRIBUTION.md`](service/middleware/index/icons/ATTRIBUTION.md).
+Directory rows include file-type icons from [vscode-icons](https://github.com/vscode-icons/vscode-icons) (v12.15.0). Icon assets are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see [`service/http/middleware/index/icons/ATTRIBUTION.md`](service/http/middleware/index/icons/ATTRIBUTION.md).
 
-## Platform lookup
+## Platform loading
 
-Indexes are loaded per platform at startup. At request time, `?platform=` sets preference with cascade fallback:
+Indexes are loaded per platform at startup. The set of platforms is the intersection of:
 
-| `?platform=` | Search order |
-|--------------|--------------|
-| *(default)* | windows → macos |
-| `windows` | windows → macos |
-| `macos` | macos → windows |
+1. Platforms available for the selected server/build (from `eveclient_*.json`)
+2. Platforms configured via `platforms:` / `--platforms` (if set)
 
-Within each platform, the **global** resfile index wins over the **OS-specific** overlay on key collisions.
+For each loaded platform, the global resfile index is merged with the OS-specific overlay; earlier mounts win on key collisions.
 
-`--platform` at startup and `?platform=` at request time are independent. If only Windows indexes are loaded, macOS-only paths will not resolve.
+If only Windows indexes are loaded, macOS-only paths will not resolve.
+
+## Build updates
+
+When no build is pinned (`build` omitted / `--build` unset), the service polls for a new client build every five minutes and reloads indexes automatically. Pin `build` to disable auto-updates and keep a fixed client version.
 
 ## Response headers
 
@@ -145,11 +228,10 @@ Asset responses include:
 |--------|-------------|
 | `Content-Type` | Derived from file extension |
 | `Cache-Control` | `public, max-age=3600` |
-| `ETag` | SHA-256 of response body |
+| `ETag` | MD5 of response body |
 | `Last-Modified` | Disk cache file mtime when served from cache; omitted on CDN fetch |
 | `X-Cache-Status` | `HIT` (disk cache) or `MISS` (CDN fetch) |
 | `X-Eve-Build` | Loaded client build number |
-| `X-Eve-Platform` | Platform that resolved the asset (`windows` or `macos`) |
 
 Conditional requests are supported via `If-None-Match` and `If-Modified-Since` (304 when validators match).
 
@@ -158,21 +240,38 @@ Health endpoints: `GET /healthz`, `GET /livez` → `200 ok`.
 ## Architecture
 
 ```
-cmd/eve-resfile-proxy/     CLI flags, signal handling
-service/                   Service lifecycle, index load, HTTP server
-  assetcache/              Optional on-disk asset cache
-  handler/                 Terminal asset response handler
-  middleware/              Request pipeline (heartbeat, resolve, load, conditional, …)
-internal/                  Index loader, fetch client, lookup
+cmd/eve-resfile-proxy/     CLI, YAML config, signal handling
+service/                   Service lifecycle, manifest load, HTTP server
+  manifest/                Index loading and platform mux
+  http/                    HTTP server, middleware, handlers
+cache/                     Cache interface and disk backend
+vfs/                       Virtual filesystem layers
+  fetch/                   CDN fetch and cache-through
+  mux/                     Multi-mount filesystem overlay
+  rewrite/                 Path alias rules
+  transform/               Read-time file transforms
 ```
 
-Request pipeline (outer → inner):
+Filesystem layers (inner → outer):
 
 ```
-heartbeat → getonly → index → resolve → load → transform → conditional → handler
+manifest (CDN-backed resfile index)
+  → rewrite (optional path aliases)
+  → transform (optional read-time transforms)
 ```
 
-`service.New` accepts functional options: `WithCache`, `WithFetch`, `WithTransformEngine`, `WithMiddleware`.
+HTTP middleware pipeline (outer → inner):
+
+```
+heartbeat (/healthz, /livez)
+  → method (GET/HEAD only)
+  → index (HTML directory listing for trailing-slash paths)
+  → load (map URL to vfs path, stat, cache HIT/MISS)
+  → conditional (ETag, 304 Not Modified)
+  → handler.Respond (read bytes, write asset response)
+```
+
+Rewrites and transforms run inside the vfs when `load` / `handler` read from the filesystem — they are not separate HTTP middleware.
 
 ## Index reference
 
@@ -183,7 +282,7 @@ heartbeat → getonly → index → resolve → load → transform → condition
 | Windows | `https://binaries.eveonline.com/eveonline_<build>.txt` |
 | macOS | `https://binaries.eveonline.com/eveonlinemacOS_<build>.txt` |
 
-Build number from `eveclient_TQ.json` unless `--build` is set.
+Build number comes from `eveclient_TQ.json` (or `eveclient_SISI.json` for Singularity) unless `build` is set.
 
 ### Resfile index logical paths
 
@@ -194,47 +293,35 @@ Build number from `eveclient_TQ.json` unless `--build` is set.
 
 ## Cache layout
 
-When `--cache` is set, one directory holds both index metadata and asset bytes:
+When caching is enabled, one directory holds fetched bytes keyed by CDN path:
 
 ```
 <cache>/
-  _transformed/               # transformed asset bytes (when --transform-config is set)
-    windows/
-      shader-fx/
-        7d/7d87a0a3a100cf9f_00b8308223bd89d4db39914d2c6488a3
-    macos/
-      hlsl-patch/
-        a9/a9d1721dd5cc6d54_e6bbb2df307e5a9527159a4c971034b5
-  <build>/                    # index metadata (per client build)
-    windows/
-      build-index.txt
-      resfileindex-global.txt
-      resfileindex-os.txt
-      platform-merged.json
-    macos/
-      ...
-    meta.json
+  _transformed/               # transformed asset bytes (when transforms are configured)
+    shader-fx/
+      7d/7d87a0a3a100cf9f_00b8308223bd89d4db39914d2c6488a3
+      7d/7d87a0a3a100cf9f_00b8308223bd89d4db39914d2c6488a3.md5sum
+  eveonline_<build>.txt       # cached build index (example)
   <cdnPath>                   # asset bytes, CDN hash layout
     7d/7d87a0a3a100cf9f_00b8308223bd89d4db39914d2c6488a3
     a9/a9d1721dd5cc6d54_e6bbb2df307e5a9527159a4c971034b5
     ...
 ```
 
-Asset paths mirror the CDN: resfile index entries map `res:/…` logical paths to `<prefix>/<hash>_<checksum>` files under the cache root (first two hex digits as the subdirectory).
+Asset paths mirror the CDN: resfile index entries map logical paths to `<prefix>/<hash>_<checksum>` files under the cache root (first two hex digits as the subdirectory).
 
 ### Reusing the EVE client cache
 
 The EVE Launcher downloads resource files into a shared **ResFiles** directory. Its layout matches the proxy asset cache exactly — each CDN path from the resfile index is a file at `<cache>/<cdnPath>`.
 
-If you have your launcher configured (you can see this in **Settings → EVE Online → Shared cache location**) to e.g. `E:\EVE Online`, you can use `--cache E:\EVE Online\ResFiles\` to re-use the launcher/client cache
+If your launcher is configured (see **Settings → EVE Online → Shared cache location**) to e.g. `E:\EVE Online`, you can use `--cache "E:\EVE Online\ResFiles"` to reuse the launcher/client cache.
 
 Assets present on disk are served as cache `HIT`s (`X-Cache-Status: HIT`); missing assets are fetched from the CDN and written into the same tree, so the launcher and proxy share downloads.
 
 **Notes:**
 
-- `--cache` also stores index metadata under `<cache>/<build>/` and transform outputs under `<cache>/_transformed/`. Build directories (numeric, e.g. `3141592`) sit alongside the hex prefix folders (`00`–`ff`) and the launcher's own entries (such as `bundles/`). This is harmless but means the proxy adds a few small text/JSON files per build.
-- Pin `--build` to match your installed client if you want index metadata to align with the game version you have cached.
-- Use `--refresh` to force re-download of index files when a new client build ships.
+- Caching also stores fetched index files (for example `eveonline_<build>.txt`) and transform outputs under `_transformed/`. These sit alongside the launcher's hex prefix folders (`00`–`ff`) and entries such as `bundles/`.
+- Pin `build` to match your installed client if you want indexes to align with the game version you have cached.
 
 ## License
 

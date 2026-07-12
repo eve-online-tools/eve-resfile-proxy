@@ -32,18 +32,24 @@ cache: .cache
 aliases:
   - alias: favicon.ico
     target: ui/texture/icons/icons111_07.png # Fedo is love, fedo is life.
-  - alias: ui.base64/
-    target: ui/
+  # In the example below, `/ui.base64/` becomes available, pointing to files in `/ui/` originally. `/ui/` also remains available.
+  # This can be combined with the `transforms` option (below) to apply transforms to files while keeping the original paths.
+  # - alias: ui.base64/
+  #   target: ui/
+  # You can also target specific extensions inside a directory. The `recursive` option allows you to match through multiple levels.
   # - alias: .webm
   #   target: .png
   #   match:
   #     path_prefix: ui/textures/icons/
+  #     recursive: true
 
-# Optional: apply transforms to the resfile index.
-transforms:
-  - name: base64
-    match:
-      path_prefix: ui.base64/
-    command:
-      args: ["/usr/bin/base64"]
-      timeout: 10s
+# Optional: apply transforms to the resfile index. These transforms are applied on requests for any file that matches.
+#           The result of these transforms are cached to ensure that transforms only happen once (assuming cache is enabled).
+#           You can remove the `<cache>/_transformed/` directory to force transforms being applied again.
+# transforms:
+#   - name: base64
+#     match:
+#       path_prefix: ui.base64/
+#     command:
+#       args: ["/usr/bin/base64"]
+#       timeout: 10s

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eve-online-tools/eve-resfile-proxy/common/platform"
@@ -78,15 +79,19 @@ cache: /var/cache/eve
 	}
 }
 
-func TestLoadConfigFileRewrites(t *testing.T) {
+func TestLoadConfigFileAliases(t *testing.T) {
 	t.Parallel()
 
 	path := writeConfigFile(t, `
-rewrites:
-  - from: legacy/icons
-    to: icons
-  - from: favicon.ico
-    to: ui/icons/favicon.ico
+aliases:
+  - alias: legacy/icons
+    target: icons
+  - alias: favicon.ico
+    target: ui/icons/favicon.ico
+  - alias: .webm
+    target: .png
+    match:
+      path_prefix: ui/icons/
 `)
 
 	cfg := defaultConfig()
@@ -94,14 +99,75 @@ rewrites:
 		t.Fatalf("loadConfigFile() error = %v", err)
 	}
 
-	if len(cfg.Rewrites) != 2 {
-		t.Fatalf("len(Rewrites) = %d, want 2", len(cfg.Rewrites))
+	if len(cfg.Aliases) != 3 {
+		t.Fatalf("len(Aliases) = %d, want 3", len(cfg.Aliases))
 	}
-	if cfg.Rewrites[0].From != "legacy/icons" || cfg.Rewrites[0].To != "icons" {
-		t.Fatalf("Rewrites[0] = %+v", cfg.Rewrites[0])
+	if cfg.Aliases[0].Alias != "legacy/icons" || cfg.Aliases[0].Target != "icons" {
+		t.Fatalf("Aliases[0] = %+v", cfg.Aliases[0])
 	}
-	if cfg.Rewrites[1].From != "favicon.ico" || cfg.Rewrites[1].To != "ui/icons/favicon.ico" {
-		t.Fatalf("Rewrites[1] = %+v", cfg.Rewrites[1])
+	if cfg.Aliases[1].Alias != "favicon.ico" || cfg.Aliases[1].Target != "ui/icons/favicon.ico" {
+		t.Fatalf("Aliases[1] = %+v", cfg.Aliases[1])
+	}
+	if cfg.Aliases[2].Match == nil || cfg.Aliases[2].Alias != ".webm" {
+		t.Fatalf("Aliases[2] = %+v", cfg.Aliases[2])
+	}
+}
+
+func TestLoadConfigFileRejectsLegacyAliasKeys(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		contents string
+		wantErr string
+	}{
+		{
+			name: "from renamed",
+			contents: `
+aliases:
+  - from: a
+    target: b
+`,
+			wantErr: "from was renamed to alias",
+		},
+		{
+			name: "to renamed",
+			contents: `
+aliases:
+  - alias: a
+    to: b
+`,
+			wantErr: "to was renamed to target",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := writeConfigFile(t, tc.contents)
+			cfg := defaultConfig()
+			if err := loadConfigFile(cfg, path); err == nil {
+				t.Fatal("expected error for legacy alias keys")
+			} else if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadConfigFileRejectsLegacyRewrites(t *testing.T) {
+	t.Parallel()
+
+	path := writeConfigFile(t, `
+rewrites:
+  - from: a
+    to: b
+`)
+
+	cfg := defaultConfig()
+	if err := loadConfigFile(cfg, path); err == nil {
+		t.Fatal("expected error for legacy rewrites key")
 	}
 }
 

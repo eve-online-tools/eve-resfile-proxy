@@ -58,9 +58,9 @@ cache: .cache
 # Optional: expose the full app and res trees under /app/ and /res/.
 # full_tree: false
 
-rewrites:
-  - from: favicon.ico
-    to: ui/texture/icons/icons111_07.png
+aliases:
+  - alias: favicon.ico
+    target: ui/texture/icons/icons111_07.png
 
 transform_limits:
   max_output_bytes: 134217728   # 128 MiB (default)
@@ -101,35 +101,55 @@ curl 'http://localhost:8080/res/icons/64/icon64.png'
 curl 'http://localhost:8080/app/windows/resfileindex.txt'
 ```
 
-Rewrites and transform match paths use the same logical paths exposed by the HTTP server (without a leading slash).
+Aliases and transform match paths use the same logical paths exposed by the HTTP server (without a leading slash).
 
-## Rewrites
+## Aliases
 
-Optional path aliases are applied before transforms. A rewrite maps a path prefix onto another path; the longest matching `from` wins.
+Optional path and extension aliases are applied before transforms. Path aliases map a virtual path onto an underlying path (longest matching `alias` wins). Extension aliases swap file extensions within a `match` scope (same fields as transforms).
 
-**File alias** — single path, no trailing slash:
-
-```yaml
-rewrites:
-  - from: favicon.ico
-    to: ui/texture/icons/icons111_07.png
-```
-
-**Directory alias** — trailing slash required on **both** `from` and `to`:
+**File alias** — single path, no `match`, no trailing slash:
 
 ```yaml
-rewrites:
-  - from: ui.base64/
-    to: ui/
-  - from: legacy/icons/
-    to: icons/
-  - from: examples/ui.md5sum/
-    to: ui/
+aliases:
+  - alias: favicon.ico
+    target: ui/texture/icons/icons111_07.png
 ```
 
-Virtual intermediate directories are created as needed (`examples/` does not need to exist in the index for the last rule).
+**Directory alias** — trailing slash required on **both** `alias` and `target`:
 
-Rewrites appear in directory listings and participate in glob matching, so aliased paths behave like real files in the index.
+```yaml
+aliases:
+  - alias: ui.base64/
+    target: ui/
+  - alias: legacy/icons/
+    target: icons/
+```
+
+**Extension alias** — include `match`; `alias` and `target` are extensions:
+
+```yaml
+aliases:
+  - alias: .webm
+    target: .png
+    match:
+      path_prefix: ui/textures/icons/
+
+  - alias: .webm
+    target: .png
+    match:
+      path_prefix: ui/
+      recursive: true
+
+  - alias: .webm
+    target: .png
+    match: {}   # any path, any depth
+```
+
+Extension rules stack with path aliases (for example, alias `graphics/effect.vulkan/` with target `graphics/effect.dx11/` and swap `.gr2` to `.cmf` under the vulkan path). List order in YAML does not affect execution.
+
+Virtual intermediate directories are created as needed for path aliases.
+
+Aliases appear in directory listings and participate in glob matching, so aliased paths behave like real files in the index.
 
 ## Transforms
 
@@ -262,7 +282,7 @@ cache/                     Cache interface and disk backend
 vfs/                       Virtual filesystem layers
   fetch/                   CDN fetch and cache-through
   mux/                     Multi-mount filesystem overlay
-  rewrite/                 Path alias rules
+  alias/                   Path and extension alias rules
   transform/               Read-time file transforms
 ```
 
@@ -270,7 +290,7 @@ Filesystem layers (inner → outer):
 
 ```
 manifest (CDN-backed resfile index)
-  → rewrite (optional path aliases)
+  → alias (optional path and extension aliases)
   → transform (optional read-time transforms)
 ```
 
@@ -285,7 +305,7 @@ heartbeat (/healthz, /livez)
   → handler.Respond (read bytes, write asset response)
 ```
 
-Rewrites and transforms run inside the vfs when `load` / `handler` read from the filesystem — they are not separate HTTP middleware.
+Aliases and transforms run inside the vfs when `load` / `handler` read from the filesystem — they are not separate HTTP middleware.
 
 ## Index reference
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/eve-online-tools/eve-resfile-proxy/common/platform"
-	"github.com/eve-online-tools/eve-resfile-proxy/vfs/rewrite"
+	"github.com/eve-online-tools/eve-resfile-proxy/vfs/alias"
 	vfstransform "github.com/eve-online-tools/eve-resfile-proxy/vfs/transform"
 	"gopkg.in/yaml.v3"
 )
@@ -22,7 +22,7 @@ type fileConfig struct {
 	Addr            string                   `yaml:"addr"`
 	NoIndex         *bool                    `yaml:"no_index"`
 	IndexListing    *bool                    `yaml:"index_listing"`
-	Rewrites        []rewrite.Rule           `yaml:"rewrites"`
+	Aliases         []alias.Alias            `yaml:"aliases"`
 	TransformLimits vfstransform.Limits      `yaml:"transform_limits"`
 	Transforms      []vfstransform.Transform `yaml:"transforms"`
 }
@@ -47,6 +47,10 @@ func loadConfigFile(cfg *config, path string) error {
 		return fmt.Errorf("read config file: %w", err)
 	}
 
+	if err := rejectLegacyConfigKeys(data); err != nil {
+		return err
+	}
+
 	var fileCfg fileConfig
 	if err := yaml.Unmarshal(data, &fileCfg); err != nil {
 		return fmt.Errorf("parse config file: %w", err)
@@ -54,6 +58,39 @@ func loadConfigFile(cfg *config, path string) error {
 
 	cfg.ConfigDir = filepath.Dir(path)
 	return fileCfg.applyTo(cfg)
+}
+
+func rejectLegacyConfigKeys(data []byte) error {
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("parse config file: %w", err)
+	}
+	if _, ok := raw["rewrites"]; ok {
+		return fmt.Errorf("rewrites was removed; use aliases")
+	}
+	if aliases, ok := raw["aliases"].(map[string]any); ok {
+		if _, hasPaths := aliases["paths"]; hasPaths {
+			return fmt.Errorf("aliases.paths was removed; use a single aliases list (extension entries include match)")
+		}
+		if _, hasExts := aliases["extensions"]; hasExts {
+			return fmt.Errorf("aliases.extensions was removed; use a single aliases list (extension entries include match)")
+		}
+	}
+	if aliases, ok := raw["aliases"].([]any); ok {
+		for i, entry := range aliases {
+			m, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, hasFrom := m["from"]; hasFrom {
+				return fmt.Errorf("aliases[%d]: from was renamed to alias", i)
+			}
+			if _, hasTo := m["to"]; hasTo {
+				return fmt.Errorf("aliases[%d]: to was renamed to target", i)
+			}
+		}
+	}
+	return nil
 }
 
 func (fc *fileConfig) applyTo(cfg *config) error {
@@ -90,8 +127,8 @@ func (fc *fileConfig) applyTo(cfg *config) error {
 		cfg.ServerConfig.IndexListing = *fc.IndexListing
 		cfg.noIndex = !*fc.IndexListing
 	}
-	if len(fc.Rewrites) > 0 {
-		cfg.Rewrites = fc.Rewrites
+	if len(fc.Aliases) > 0 {
+		cfg.Aliases = fc.Aliases
 	}
 	if fc.TransformLimits != (vfstransform.Limits{}) {
 		cfg.TransformLimits = fc.TransformLimits

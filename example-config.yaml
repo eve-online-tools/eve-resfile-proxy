@@ -23,16 +23,21 @@ cache: .cache
 # Optional: load the full binaries/resources tree.
 #           This moves the resources under /res/, and enables access to
 #           the /app/ binaries distribution.
-# Note: this will affect your paths for rewrites and transforms!
+# Note: this will affect your paths for aliases and transforms!
 # full_tree: false
 
-# Optional: apply rewrites to the resfile index.
-# File alias: no trailing slash. Directory alias: trailing slash on BOTH from and to.
-rewrites:
-  - from: favicon.ico
-    to: ui/texture/icons/icons111_07.png # Fedo is love, fedo is life.
-  - from: ui.base64/
-    to: ui/
+# Optional: path and extension aliases for the resfile index.
+# Path alias: no trailing slash for files; directory alias: trailing slash on BOTH alias and target.
+# Extension alias: add match (alias/target are extensions like .webm and .png).
+aliases:
+  - alias: favicon.ico
+    target: ui/texture/icons/icons111_07.png # Fedo is love, fedo is life.
+  - alias: ui.base64/
+    target: ui/
+  # - alias: .webm
+  #   target: .png
+  #   match:
+  #     path_prefix: ui/textures/icons/
 
 # Optional: apply transforms to the resfile index.
 transforms:

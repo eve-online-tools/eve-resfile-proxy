@@ -3,7 +3,7 @@ package service
 import (
 	"github.com/eve-online-tools/eve-resfile-proxy/common/platform"
 	svchttp "github.com/eve-online-tools/eve-resfile-proxy/service/http"
-	"github.com/eve-online-tools/eve-resfile-proxy/vfs/rewrite"
+	"github.com/eve-online-tools/eve-resfile-proxy/vfs/alias"
 	vfstransform "github.com/eve-online-tools/eve-resfile-proxy/vfs/transform"
 )
 
@@ -13,7 +13,7 @@ type Config struct {
 	Platforms       []platform.Platform
 	CacheDir        string
 	FullTree        bool
-	Rewrites        []rewrite.Rule
+	Aliases         []alias.Alias
 	Transforms      []vfstransform.Transform
 	TransformLimits vfstransform.Limits
 	ConfigDir       string

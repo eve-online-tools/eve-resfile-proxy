@@ -15,7 +15,7 @@ import (
 	"github.com/eve-online-tools/eve-resfile-proxy/service/clientbuild"
 	svchttp "github.com/eve-online-tools/eve-resfile-proxy/service/http"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/manifest"
-	"github.com/eve-online-tools/eve-resfile-proxy/vfs/rewrite"
+	"github.com/eve-online-tools/eve-resfile-proxy/vfs/alias"
 	"github.com/eve-online-tools/eve-resfile-proxy/vfs/transform"
 )
 
@@ -108,8 +108,8 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 
-	// rewrite.New does not wrap if no rewrites are configured
-	fsys, err := rewrite.New(s.manifest, s.config.Rewrites)
+	// alias.New does not wrap if no aliases are configured
+	fsys, err := alias.New(s.manifest, s.config.Aliases)
 	if err != nil {
 		return err
 	}

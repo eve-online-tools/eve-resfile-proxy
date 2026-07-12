@@ -57,7 +57,11 @@ func (f *FS) Stat(name string) (fs.FileInfo, error) {
 		return nil, err
 	}
 	if target, ok := translatePath(cleaned, f.rules); ok {
-		return fs.Stat(f.fsys, target)
+		info, err := fs.Stat(f.fsys, target)
+		if err != nil {
+			return nil, err
+		}
+		return aliasedFileInfo(path.Base(cleaned), info), nil
 	}
 	return fs.Stat(f.fsys, cleaned)
 }
@@ -201,7 +205,7 @@ func virtualEntriesForDir(fsys fs.FS, dir string, rules []compiledRule) []fs.Dir
 	var entries []fs.DirEntry
 
 	for _, rule := range rules {
-		childName, isFile := virtualChildAt(dir, rule.from)
+		childName, isFile := virtualChildAt(dir, rule)
 		if childName == "" {
 			continue
 		}
@@ -228,12 +232,16 @@ func virtualFileEntry(fsys fs.FS, name, target string) fileEntry {
 	return entry
 }
 
-func virtualChildAt(dir, from string) (name string, isFile bool) {
+func virtualChildAt(dir string, rule compiledRule) (name string, isFile bool) {
+	from := rule.from
 	switch dir {
 	case ".":
-		if strings.Contains(from, "/") {
-			seg, _ := vfspath.FirstSegment(from)
-			return seg, false
+		if rule.dir {
+			if strings.Contains(from, "/") {
+				seg, _ := vfspath.FirstSegment(from)
+				return seg, false
+			}
+			return from, false
 		}
 		return from, true
 	default:

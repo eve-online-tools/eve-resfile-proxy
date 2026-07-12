@@ -107,13 +107,27 @@ Rewrites and transform match paths use the same logical paths exposed by the HTT
 
 Optional path aliases are applied before transforms. A rewrite maps a path prefix onto another path; the longest matching `from` wins.
 
+**File alias** — single path, no trailing slash:
+
 ```yaml
 rewrites:
   - from: favicon.ico
     to: ui/texture/icons/icons111_07.png
-  - from: legacy/icons
-    to: icons
 ```
+
+**Directory alias** — trailing slash required on **both** `from` and `to`:
+
+```yaml
+rewrites:
+  - from: ui.base64/
+    to: ui/
+  - from: legacy/icons/
+    to: icons/
+  - from: examples/ui.md5sum/
+    to: ui/
+```
+
+Virtual intermediate directories are created as needed (`examples/` does not need to exist in the index for the last rule).
 
 Rewrites appear in directory listings and participate in glob matching, so aliased paths behave like real files in the index.
 

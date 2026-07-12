@@ -15,7 +15,7 @@ func TestFS_prefixOpenStatReadFile(t *testing.T) {
 	}
 
 	fsys, err := rewrite.New(parent, []rewrite.Rule{
-		{From: "legacy/icons", To: "icons"},
+		{From: "legacy/icons/", To: "icons/"},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -35,6 +35,9 @@ func TestFS_prefixOpenStatReadFile(t *testing.T) {
 	}
 	if info.IsDir() {
 		t.Fatal("expected file")
+	}
+	if info.Name() != "icon.png" {
+		t.Fatalf("Name() = %q, want icon.png", info.Name())
 	}
 }
 
@@ -57,6 +60,14 @@ func TestFS_exactFileAlias(t *testing.T) {
 	if string(data) != "fav" {
 		t.Fatalf("data = %q", data)
 	}
+
+	info, err := fs.Stat(fsys, "favicon.ico")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.Name() != "favicon.ico" {
+		t.Fatalf("Name() = %q, want favicon.ico", info.Name())
+	}
 }
 
 func TestFS_longestFromWins(t *testing.T) {
@@ -66,8 +77,8 @@ func TestFS_longestFromWins(t *testing.T) {
 	}
 
 	fsys, err := rewrite.New(parent, []rewrite.Rule{
-		{From: "alias/a/b", To: "a/b"},
-		{From: "alias/a/b/c", To: "a/b/c"},
+		{From: "alias/a/b/", To: "a/b/"},
+		{From: "alias/a/b/c/", To: "a/b/c/"},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -132,7 +143,7 @@ func TestFS_readDirVirtualEntries(t *testing.T) {
 	}
 
 	fsys, err := rewrite.New(parent, []rewrite.Rule{
-		{From: "legacy/icons", To: "icons"},
+		{From: "legacy/icons/", To: "icons/"},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -160,6 +171,116 @@ func TestFS_readDirVirtualEntries(t *testing.T) {
 	}
 	if !containsDirEntry(icons, "64") || !containsFileEntry(icons, "readme.txt") {
 		t.Fatalf("legacy/icons entries = %v", entryNames(icons))
+	}
+}
+
+func TestFS_singleSegmentDirAliasAtRoot(t *testing.T) {
+	parent := fstest.MapFS{
+		"ui/foo.txt": &fstest.MapFile{Data: []byte("hello")},
+		"ui/bar.txt": &fstest.MapFile{Data: []byte("world")},
+	}
+
+	fsys, err := rewrite.New(parent, []rewrite.Rule{
+		{From: "ui.base64/", To: "ui/"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	root, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		t.Fatalf("ReadDir .: %v", err)
+	}
+	if !containsDirEntry(root, "ui.base64") {
+		t.Fatalf("root entries = %v, want ui.base64 directory", entryNames(root))
+	}
+	if containsFileEntry(root, "ui.base64") {
+		t.Fatal("ui.base64 should be a directory, not a file")
+	}
+
+	alias, err := fs.ReadDir(fsys, "ui.base64")
+	if err != nil {
+		t.Fatalf("ReadDir ui.base64: %v", err)
+	}
+	if !containsFileEntry(alias, "foo.txt") || !containsFileEntry(alias, "bar.txt") {
+		t.Fatalf("ui.base64 entries = %v", entryNames(alias))
+	}
+
+	data, err := fs.ReadFile(fsys, "ui.base64/foo.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("data = %q", data)
+	}
+}
+
+func TestFS_singleSegmentDirAliasStat(t *testing.T) {
+	parent := fstest.MapFS{
+		"ui/foo.txt": &fstest.MapFile{Data: []byte("hello")},
+	}
+
+	fsys, err := rewrite.New(parent, []rewrite.Rule{
+		{From: "ui.base64/", To: "ui/"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	info, err := fs.Stat(fsys, "ui.base64")
+	if err != nil {
+		t.Fatalf("Stat dir: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected directory")
+	}
+	if info.Name() != "ui.base64" {
+		t.Fatalf("Name() = %q, want ui.base64", info.Name())
+	}
+
+	fileInfo, err := fs.Stat(fsys, "ui.base64/foo.txt")
+	if err != nil {
+		t.Fatalf("Stat file: %v", err)
+	}
+	if fileInfo.Name() != "foo.txt" {
+		t.Fatalf("Name() = %q, want foo.txt", fileInfo.Name())
+	}
+}
+
+func TestFS_nestedVirtualDirAlias(t *testing.T) {
+	parent := fstest.MapFS{
+		"ui/foo.txt": &fstest.MapFile{Data: []byte("hello")},
+	}
+
+	fsys, err := rewrite.New(parent, []rewrite.Rule{
+		{From: "examples/ui.md5sum/", To: "ui/"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	root, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		t.Fatalf("ReadDir .: %v", err)
+	}
+	if !containsDirEntry(root, "examples") {
+		t.Fatalf("root entries = %v, want examples dir", entryNames(root))
+	}
+
+	examples, err := fs.ReadDir(fsys, "examples")
+	if err != nil {
+		t.Fatalf("ReadDir examples: %v", err)
+	}
+	if !containsDirEntry(examples, "ui.md5sum") {
+		t.Fatalf("examples entries = %v, want ui.md5sum dir", entryNames(examples))
+	}
+
+	data, err := fs.ReadFile(fsys, "examples/ui.md5sum/foo.txt")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("data = %q", data)
 	}
 }
 
@@ -204,7 +325,7 @@ func TestFS_globAliasPattern(t *testing.T) {
 	}
 
 	fsys, err := rewrite.New(parent, []rewrite.Rule{
-		{From: "legacy/icons", To: "icons"},
+		{From: "legacy/icons/", To: "icons/"},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -226,13 +347,34 @@ func TestFS_globAliasPattern(t *testing.T) {
 	}
 }
 
+func TestFS_globSingleSegmentDirAlias(t *testing.T) {
+	parent := fstest.MapFS{
+		"ui/foo.txt": &fstest.MapFile{Data: []byte("a")},
+	}
+
+	fsys, err := rewrite.New(parent, []rewrite.Rule{
+		{From: "ui.base64/", To: "ui/"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	matches, err := fs.Glob(fsys, "ui.base64/*.txt")
+	if err != nil {
+		t.Fatalf("Glob: %v", err)
+	}
+	if len(matches) != 1 || matches[0] != "ui.base64/foo.txt" {
+		t.Fatalf("matches = %v", matches)
+	}
+}
+
 func TestFS_globPassthrough(t *testing.T) {
 	parent := fstest.MapFS{
 		"icons/a.png": &fstest.MapFile{Data: []byte("a")},
 	}
 
 	fsys, err := rewrite.New(parent, []rewrite.Rule{
-		{From: "legacy/icons", To: "icons"},
+		{From: "legacy/icons/", To: "icons/"},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -265,6 +407,12 @@ func TestCompileRules_validation(t *testing.T) {
 		{name: "invalid from", rules: []rewrite.Rule{
 			{From: "../escape", To: "b"},
 		}},
+		{name: "dir from without dir to", rules: []rewrite.Rule{
+			{From: "ui.base64/", To: "ui"},
+		}},
+		{name: "dir to without dir from", rules: []rewrite.Rule{
+			{From: "ui.base64", To: "ui/"},
+		}},
 	}
 
 	for _, tt := range tests {
@@ -283,7 +431,7 @@ func TestFS_underlyingWinsOnReadDirCollision(t *testing.T) {
 	}
 
 	fsys, err := rewrite.New(parent, []rewrite.Rule{
-		{From: "legacy/icons", To: "icons"},
+		{From: "legacy/icons/", To: "icons/"},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

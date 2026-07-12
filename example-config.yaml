@@ -27,9 +27,18 @@ cache: .cache
 # full_tree: false
 
 # Optional: apply rewrites to the resfile index.
+# File alias: no trailing slash. Directory alias: trailing slash on BOTH from and to.
 rewrites:
   - from: favicon.ico
     to: ui/texture/icons/icons111_07.png # Fedo is love, fedo is life.
+  - from: ui.base64/
+    to: ui/
 
 # Optional: apply transforms to the resfile index.
-transforms: []
+transforms:
+  - name: base64
+    match:
+      path_prefix: ui.base64/
+    command:
+      args: ["/usr/bin/base64"]
+      timeout: 10s

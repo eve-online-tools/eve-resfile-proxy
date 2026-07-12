@@ -19,6 +19,7 @@ type Rule struct {
 type compiledRule struct {
 	from string
 	to   string
+	dir  bool
 }
 
 func compileRules(rules []Rule) ([]compiledRule, error) {
@@ -30,6 +31,12 @@ func compileRules(rules []Rule) ([]compiledRule, error) {
 	seen := make(map[string]struct{}, len(rules))
 
 	for i, rule := range rules {
+		fromSlash := strings.HasSuffix(strings.TrimSpace(rule.From), "/")
+		toSlash := strings.HasSuffix(strings.TrimSpace(rule.To), "/")
+		if fromSlash != toSlash {
+			return nil, fmt.Errorf("rewrites[%d]: directory aliases require trailing slashes on both from and to", i)
+		}
+
 		from, err := normalizeRulePath(rule.From)
 		if err != nil {
 			return nil, fmt.Errorf("rewrites[%d].from: %w", i, err)
@@ -45,7 +52,7 @@ func compileRules(rules []Rule) ([]compiledRule, error) {
 			return nil, fmt.Errorf("rewrites[%d]: duplicate from path %q", i, from)
 		}
 		seen[from] = struct{}{}
-		compiled = append(compiled, compiledRule{from: from, to: to})
+		compiled = append(compiled, compiledRule{from: from, to: to, dir: fromSlash})
 	}
 
 	sort.Slice(compiled, func(i, j int) bool {
@@ -56,10 +63,15 @@ func compileRules(rules []Rule) ([]compiledRule, error) {
 }
 
 func normalizeRulePath(name string) (string, error) {
-	if name == "" {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
 		return "", fmt.Errorf("path must not be empty")
 	}
-	cleaned, err := vfspath.CleanFile(name)
+	trimmed = strings.TrimSuffix(trimmed, "/")
+	if trimmed == "" {
+		return "", fmt.Errorf("path must not be empty")
+	}
+	cleaned, err := vfspath.CleanFile(trimmed)
 	if err != nil {
 		return "", fmt.Errorf("invalid path %q", name)
 	}

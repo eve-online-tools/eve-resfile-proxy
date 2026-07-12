@@ -117,9 +117,9 @@ func TestLoadConfigFileRejectsLegacyAliasKeys(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
+		name     string
 		contents string
-		wantErr string
+		wantErr  string
 	}{
 		{
 			name: "from renamed",

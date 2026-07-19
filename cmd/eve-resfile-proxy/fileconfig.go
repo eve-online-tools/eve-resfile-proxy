@@ -22,6 +22,7 @@ type fileConfig struct {
 	Addr            string                   `yaml:"addr"`
 	NoIndex         *bool                    `yaml:"no_index"`
 	IndexListing    *bool                    `yaml:"index_listing"`
+	CORS            *bool                    `yaml:"cors"`
 	Aliases         []alias.Alias            `yaml:"aliases"`
 	TransformLimits vfstransform.Limits      `yaml:"transform_limits"`
 	Transforms      []vfstransform.Transform `yaml:"transforms"`
@@ -126,6 +127,10 @@ func (fc *fileConfig) applyTo(cfg *config) error {
 	if fc.IndexListing != nil {
 		cfg.ServerConfig.IndexListing = *fc.IndexListing
 		cfg.noIndex = !*fc.IndexListing
+	}
+	if fc.CORS != nil {
+		cfg.ServerConfig.CORS = *fc.CORS
+		cfg.noCORS = !*fc.CORS
 	}
 	if len(fc.Aliases) > 0 {
 		cfg.Aliases = fc.Aliases

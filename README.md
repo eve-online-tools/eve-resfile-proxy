@@ -85,6 +85,7 @@ Relative paths in config (for example WASM module paths) resolve against the con
 | `--full-tree` | `false` | Expose full app and res filesystem trees |
 | `--debug` | `false` | Enable debug logging |
 | `--no-index` | `false` | Disable directory listing for paths ending in `/` |
+| `--no-cors` | `false` | Disable CORS headers (enabled by default) |
 
 ## URL paths
 
@@ -238,6 +239,16 @@ curl 'http://localhost:8080/icons/64/'
 Pass `--no-index` or set `no_index: true` to disable listing; trailing-slash paths then fall through to normal lookup and typically return 404.
 
 Directory rows include file-type icons from [vscode-icons](https://github.com/vscode-icons/vscode-icons) (v12.15.0). Icon assets are licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); see [`service/http/middleware/index/icons/ATTRIBUTION.md`](service/http/middleware/index/icons/ATTRIBUTION.md).
+
+## CORS
+
+By default, responses include permissive CORS headers (`Access-Control-Allow-Origin: *`) so assets can be fetched cross-origin from a browser, and `OPTIONS` preflight requests are answered directly. Pass `--no-cors` or set `cors: false` to disable.
+
+## Range requests
+
+Responses advertise `Accept-Ranges: bytes` and honour HTTP `Range` requests (partial `206`, `416` for unsatisfiable ranges, and `If-Range`). This is handled by the standard library, so conditional and multipart-range semantics come for free.
+
+Note: ranges are served from the fully-resolved asset held in memory (assets are checksum-verified and may be transformed as a whole), so a ranged request still fetches the complete asset from the CDN — it saves proxy→client bytes, not proxy→CDN bytes.
 
 ## Platform loading
 

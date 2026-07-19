@@ -13,6 +13,7 @@ import (
 	"github.com/eve-online-tools/eve-resfile-proxy/service/buildnumber"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/handler"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/conditional"
+	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/cors"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/heartbeat"
 	indexmw "github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/index"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/load"
@@ -24,6 +25,7 @@ type ServerConfig struct {
 	Addr              string
 	ReadHeaderTimeout time.Duration
 	IndexListing      bool
+	CORS              bool
 }
 
 func (c *ServerConfig) WithDefaults() {
@@ -52,14 +54,20 @@ func NewServer(
 		logger = slog.Default()
 	}
 
-	middlewares := MiddlewareChain{
+	middlewares := MiddlewareChain{}
+	if cfg.CORS {
+		// Outermost, so every response (including heartbeats and errors)
+		// carries CORS headers and OPTIONS preflights are answered.
+		middlewares = append(middlewares, cors.Middleware)
+	}
+	middlewares = append(middlewares,
 		heartbeat.Middleware("/healthz"),
 		heartbeat.Middleware("/livez"),
 		method.Middleware,
 		indexmw.Middleware(cfg.IndexListing, fsys, build),
 		load.Middleware(fsys, diskCache),
 		conditional.Middleware,
-	}
+	)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,

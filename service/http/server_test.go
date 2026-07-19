@@ -16,6 +16,7 @@ import (
 	svchttp "github.com/eve-online-tools/eve-resfile-proxy/service/http"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/handler"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/conditional"
+	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/cors"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/heartbeat"
 	indexmw "github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/index"
 	"github.com/eve-online-tools/eve-resfile-proxy/service/http/middleware/load"
@@ -248,6 +249,134 @@ func TestBuildNumberUpdates(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), "Client build 456") {
 		t.Fatalf("listing footer missing updated build: %s", rec.Body.String())
+	}
+}
+
+func TestHandlerRangeRequest(t *testing.T) {
+	h := testHandler(t, testFS(t), "")
+
+	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+	req.Header.Set("Range", "bytes=0-3")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206; body=%s", rec.Code, rec.Body.String())
+	}
+	if cr := rec.Header().Get("Content-Range"); cr != "bytes 0-3/8" {
+		t.Fatalf("content-range = %q, want bytes 0-3/8", cr)
+	}
+	if rec.Body.String() != "png-" {
+		t.Fatalf("body = %q, want png-", rec.Body.String())
+	}
+	if rec.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("content-type = %q", rec.Header().Get("Content-Type"))
+	}
+}
+
+func TestHandlerRangeUnsatisfiable(t *testing.T) {
+	h := testHandler(t, testFS(t), "")
+
+	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+	req.Header.Set("Range", "bytes=100-200")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestedRangeNotSatisfiable {
+		t.Fatalf("status = %d, want 416", rec.Code)
+	}
+}
+
+func TestHandlerAdvertisesAcceptRanges(t *testing.T) {
+	h := testHandler(t, testFS(t), "")
+
+	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if ar := rec.Header().Get("Accept-Ranges"); ar != "bytes" {
+		t.Fatalf("accept-ranges = %q, want bytes", ar)
+	}
+}
+
+func TestHandlerHeadAdvertisesAcceptRanges(t *testing.T) {
+	h := testHandler(t, testFS(t), "")
+
+	req := httptest.NewRequest(http.MethodHead, "/icons/64/icon.png", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if ar := rec.Header().Get("Accept-Ranges"); ar != "bytes" {
+		t.Fatalf("accept-ranges = %q, want bytes", ar)
+	}
+}
+
+func TestHandlerIfRange(t *testing.T) {
+	h := testHandler(t, testFS(t), "")
+
+	// Obtain the current ETag.
+	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("missing ETag")
+	}
+
+	// Matching If-Range → the range is served (206).
+	req = httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+	req.Header.Set("Range", "bytes=0-3")
+	req.Header.Set("If-Range", etag)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("matching If-Range status = %d, want 206", rec.Code)
+	}
+
+	// Stale If-Range → the full body is served (200).
+	req = httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+	req.Header.Set("Range", "bytes=0-3")
+	req.Header.Set("If-Range", `"stale"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stale If-Range status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != "png-data" {
+		t.Fatalf("stale If-Range body = %q, want png-data", rec.Body.String())
+	}
+}
+
+func TestCORSHeadersOnResponse(t *testing.T) {
+	h := cors.Middleware(testHandler(t, testFS(t), ""))
+
+	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("allow-origin = %q, want *", got)
+	}
+}
+
+func TestCORSHeadersOnNotFound(t *testing.T) {
+	h := cors.Middleware(testHandler(t, testFS(t), ""))
+
+	req := httptest.NewRequest(http.MethodGet, "/does/not/exist.png", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("allow-origin = %q, want * on error response", got)
 	}
 }
 

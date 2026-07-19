@@ -20,6 +20,9 @@ cache: .cache
 # Optional: Disable directory listings
 # no_index: false
 
+# Optional: CORS headers are enabled by default; set to false to disable.
+# cors: true
+
 # Optional: load the full binaries/resources tree.
 #           This moves the resources under /res/, and enables access to
 #           the /app/ binaries distribution.

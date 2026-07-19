@@ -23,6 +23,7 @@ debug: true
 full_tree: true
 addr: ":9090"
 no_index: true
+cors: false
 `)
 
 	cfg := defaultConfig()
@@ -56,6 +57,12 @@ no_index: true
 	}
 	if cfg.ServerConfig.IndexListing {
 		t.Fatal("IndexListing = true, want false")
+	}
+	if !cfg.noCORS {
+		t.Fatal("noCORS = false, want true")
+	}
+	if cfg.ServerConfig.CORS {
+		t.Fatal("CORS = true, want false")
 	}
 }
 

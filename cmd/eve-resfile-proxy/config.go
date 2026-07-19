@@ -16,6 +16,7 @@ type config struct {
 	service.Config
 	Debug         bool
 	noIndex       bool
+	noCORS        bool
 	platformsFlag string
 }
 
@@ -26,6 +27,7 @@ func defaultConfig() *config {
 			ServerConfig: svchttp.ServerConfig{
 				Addr:         ":8080",
 				IndexListing: true,
+				CORS:         true,
 			},
 		},
 	}
@@ -49,6 +51,7 @@ func parseConfig() (*config, error) {
 	flag.BoolVar(&cfg.FullTree, "full-tree", cfg.FullTree, "Expose full app and res filesystem trees")
 	flag.StringVar(&cfg.ServerConfig.Addr, "addr", cfg.ServerConfig.Addr, "HTTP listen address")
 	flag.BoolVar(&cfg.noIndex, "no-index", cfg.noIndex, "Disable directory listing for paths ending in /")
+	flag.BoolVar(&cfg.noCORS, "no-cors", cfg.noCORS, "Disable CORS headers (enabled by default)")
 	flag.String("config", "", "Path to YAML config file")
 
 	flag.Parse()
@@ -67,6 +70,10 @@ func parseConfig() (*config, error) {
 
 	if cfg.noIndex {
 		cfg.ServerConfig.IndexListing = false
+	}
+
+	if cfg.noCORS {
+		cfg.ServerConfig.CORS = false
 	}
 
 	return cfg, nil

@@ -252,53 +252,90 @@ func TestBuildNumberUpdates(t *testing.T) {
 	}
 }
 
-func TestHandlerRangeRequest(t *testing.T) {
+func TestHandlerRange(t *testing.T) {
 	h := testHandler(t, testFS(t), "")
 
-	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
-	req.Header.Set("Range", "bytes=0-3")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusPartialContent {
-		t.Fatalf("status = %d, want 206; body=%s", rec.Code, rec.Body.String())
-	}
-	if cr := rec.Header().Get("Content-Range"); cr != "bytes 0-3/8" {
-		t.Fatalf("content-range = %q, want bytes 0-3/8", cr)
-	}
-	if rec.Body.String() != "png-" {
-		t.Fatalf("body = %q, want png-", rec.Body.String())
-	}
-	if rec.Header().Get("Content-Type") != "image/png" {
-		t.Fatalf("content-type = %q", rec.Header().Get("Content-Type"))
-	}
-}
-
-func TestHandlerRangeUnsatisfiable(t *testing.T) {
-	h := testHandler(t, testFS(t), "")
-
-	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
-	req.Header.Set("Range", "bytes=100-200")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusRequestedRangeNotSatisfiable {
-		t.Fatalf("status = %d, want 416", rec.Code)
-	}
-}
-
-func TestHandlerAdvertisesAcceptRanges(t *testing.T) {
-	h := testHandler(t, testFS(t), "")
-
+	// Fetch the current ETag so the If-Range cases can reference it.
 	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("missing ETag")
 	}
-	if ar := rec.Header().Get("Accept-Ranges"); ar != "bytes" {
-		t.Fatalf("accept-ranges = %q, want bytes", ar)
+
+	tests := []struct {
+		name             string
+		rangeHdr         string
+		ifRange          string
+		wantStatus       int
+		wantContentRange string
+		wantBody         string
+		wantAcceptRanges string
+	}{
+		{
+			name:             "no range serves full body",
+			wantStatus:       http.StatusOK,
+			wantBody:         "png-data",
+			wantAcceptRanges: "bytes",
+		},
+		{
+			name:             "range serves partial content",
+			rangeHdr:         "bytes=0-3",
+			wantStatus:       http.StatusPartialContent,
+			wantContentRange: "bytes 0-3/8",
+			wantBody:         "png-",
+		},
+		{
+			name:             "unsatisfiable range",
+			rangeHdr:         "bytes=100-200",
+			wantStatus:       http.StatusRequestedRangeNotSatisfiable,
+			wantContentRange: "bytes */8",
+		},
+		{
+			name:             "matching if-range serves partial content",
+			rangeHdr:         "bytes=0-3",
+			ifRange:          etag,
+			wantStatus:       http.StatusPartialContent,
+			wantContentRange: "bytes 0-3/8",
+			wantBody:         "png-",
+		},
+		{
+			name:       "stale if-range serves full body",
+			rangeHdr:   "bytes=0-3",
+			ifRange:    `"stale"`,
+			wantStatus: http.StatusOK,
+			wantBody:   "png-data",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
+			if tt.rangeHdr != "" {
+				req.Header.Set("Range", tt.rangeHdr)
+			}
+			if tt.ifRange != "" {
+				req.Header.Set("If-Range", tt.ifRange)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if got := rec.Header().Get("Content-Range"); got != tt.wantContentRange {
+				t.Fatalf("content-range = %q, want %q", got, tt.wantContentRange)
+			}
+			if tt.wantBody != "" && rec.Body.String() != tt.wantBody {
+				t.Fatalf("body = %q, want %q", rec.Body.String(), tt.wantBody)
+			}
+			if tt.wantAcceptRanges != "" {
+				if got := rec.Header().Get("Accept-Ranges"); got != tt.wantAcceptRanges {
+					t.Fatalf("accept-ranges = %q, want %q", got, tt.wantAcceptRanges)
+				}
+			}
+		})
 	}
 }
 
@@ -311,42 +348,6 @@ func TestHandlerHeadAdvertisesAcceptRanges(t *testing.T) {
 
 	if ar := rec.Header().Get("Accept-Ranges"); ar != "bytes" {
 		t.Fatalf("accept-ranges = %q, want bytes", ar)
-	}
-}
-
-func TestHandlerIfRange(t *testing.T) {
-	h := testHandler(t, testFS(t), "")
-
-	// Obtain the current ETag.
-	req := httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	etag := rec.Header().Get("ETag")
-	if etag == "" {
-		t.Fatal("missing ETag")
-	}
-
-	// Matching If-Range → the range is served (206).
-	req = httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
-	req.Header.Set("Range", "bytes=0-3")
-	req.Header.Set("If-Range", etag)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusPartialContent {
-		t.Fatalf("matching If-Range status = %d, want 206", rec.Code)
-	}
-
-	// Stale If-Range → the full body is served (200).
-	req = httptest.NewRequest(http.MethodGet, "/icons/64/icon.png", nil)
-	req.Header.Set("Range", "bytes=0-3")
-	req.Header.Set("If-Range", `"stale"`)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("stale If-Range status = %d, want 200", rec.Code)
-	}
-	if rec.Body.String() != "png-data" {
-		t.Fatalf("stale If-Range body = %q, want png-data", rec.Body.String())
 	}
 }
 
@@ -385,8 +386,8 @@ func TestGracefulShutdown(t *testing.T) {
 	srv := svchttp.NewServer(&cfg, testFS(t), nil, nil, nil)
 	srv.Start()
 
-	time.Sleep(50 * time.Millisecond)
-
+	// Shutdown is safe to call regardless of whether the serve loop has begun;
+	// no need to wait for the listener goroutine.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

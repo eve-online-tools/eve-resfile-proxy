@@ -24,6 +24,9 @@ import (
 type ServerConfig struct {
 	Addr              string
 	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
 	IndexListing      bool
 	CORS              bool
 }
@@ -35,6 +38,16 @@ func (c *ServerConfig) WithDefaults() {
 	if c.ReadHeaderTimeout == 0 {
 		c.ReadHeaderTimeout = 10 * time.Second
 	}
+	if c.ReadTimeout == 0 {
+		c.ReadTimeout = 15 * time.Second
+	}
+	if c.IdleTimeout == 0 {
+		c.IdleTimeout = 120 * time.Second
+	}
+	// WriteTimeout defaults to 0 (unlimited) on purpose: assets can be large and
+	// slow to stream — including a cache-miss CDN fetch mid-write — and a write
+	// cap would abort legitimate downloads. Slow-client protection on the request
+	// side is covered by ReadHeaderTimeout/ReadTimeout.
 }
 
 type Server struct {
@@ -73,6 +86,9 @@ func NewServer(
 		Addr:              cfg.Addr,
 		Handler:           middlewares.For(handler.Respond(build)),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 
 	return &Server{

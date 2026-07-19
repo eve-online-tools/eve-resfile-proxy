@@ -246,7 +246,7 @@ By default, responses include permissive CORS headers (`Access-Control-Allow-Ori
 
 ## Range requests
 
-Responses advertise `Accept-Ranges: bytes` and honour HTTP `Range` requests (partial `206`, `416` for unsatisfiable ranges, and `If-Range`). This is handled by the standard library, so conditional and multipart-range semantics come for free.
+Responses advertise `Accept-Ranges: bytes` and honor HTTP `Range` requests (partial `206`, `416` for unsatisfiable ranges, and `If-Range`). This is handled by the standard library, so conditional and multipart-range semantics come for free.
 
 Note: ranges are served from the fully-resolved asset held in memory (assets are checksum-verified and may be transformed as a whole), so a ranged request still fetches the complete asset from the CDN — it saves proxy→client bytes, not proxy→CDN bytes.
 
